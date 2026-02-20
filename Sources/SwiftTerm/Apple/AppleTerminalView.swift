@@ -1395,24 +1395,13 @@ extension TerminalView {
         pendingDisplay = false
     }
     
-    //
-    // The code below is intended to not repaint too often, which can produce flicker, for example
-    // when the user refreshes the display, and this repains the screen, as dispatch delivers data
-    // in blocks of 1024 bytes, which is not enough to cover the whole screen, so this delays
-    // the update for a 1/600th of a second.
-    //
-    // It is also cheap, so should be called when new data has been posted or received.
     func queuePendingDisplay ()
     {
-        // throttle
         if !pendingDisplay {
-            let fps60 = 16670000
-            // let fps30 = 16670000*2
-            let fpsDelay = fps60
             pendingDisplay = true
-            DispatchQueue.main.asyncAfter(
-                deadline: DispatchTime (uptimeNanoseconds: DispatchTime.now().uptimeNanoseconds + UInt64 (fpsDelay)),
-                execute: updateDisplay)
+            DispatchQueue.main.async { [weak self] in
+                self?.updateDisplay()
+            }
         }
     }
     
