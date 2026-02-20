@@ -1337,9 +1337,14 @@ extension TerminalView {
         }
         setNeedsDisplay(region)
         #else
-        // TODO iOS: need to update the code above, but will do that when I get some real
-        // life data being fed into it.
-        setNeedsDisplay(bounds)
+        // iOS: incremental dirty region (UIKit coordinates, origin top-left)
+        let cellH = cellDimension.height
+        let y = CGFloat(rowStart) * cellH
+        var height = CGFloat(rowEnd - rowStart + 1) * cellH
+        if rowEnd >= terminal.rows - 1 {
+            height = bounds.height - y
+        }
+        setNeedsDisplay(CGRect(x: 0, y: y, width: bounds.width, height: height))
         #endif
         
         pendingDisplay = false
