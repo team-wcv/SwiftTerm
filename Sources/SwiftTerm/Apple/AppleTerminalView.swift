@@ -1337,9 +1337,14 @@ extension TerminalView {
         }
         setNeedsDisplay(region)
         #else
-        // TODO iOS: need to update the code above, but will do that when I get some real
-        // life data being fed into it.
-        setNeedsDisplay(bounds)
+        // iOS: incremental dirty region (UIKit coordinates, origin top-left)
+        let cellH = cellDimension.height
+        let y = CGFloat(rowStart) * cellH
+        var height = CGFloat(rowEnd - rowStart + 1) * cellH
+        if rowEnd >= terminal.rows - 1 {
+            height = bounds.height - y
+        }
+        setNeedsDisplay(CGRect(x: 0, y: y, width: bounds.width, height: height))
         #endif
         
         pendingDisplay = false
@@ -1390,24 +1395,13 @@ extension TerminalView {
         pendingDisplay = false
     }
     
-    //
-    // The code below is intended to not repaint too often, which can produce flicker, for example
-    // when the user refreshes the display, and this repains the screen, as dispatch delivers data
-    // in blocks of 1024 bytes, which is not enough to cover the whole screen, so this delays
-    // the update for a 1/600th of a second.
-    //
-    // It is also cheap, so should be called when new data has been posted or received.
     func queuePendingDisplay ()
     {
-        // throttle
         if !pendingDisplay {
-            let fps60 = 16670000
-            // let fps30 = 16670000*2
-            let fpsDelay = fps60
             pendingDisplay = true
-            DispatchQueue.main.asyncAfter(
-                deadline: DispatchTime (uptimeNanoseconds: DispatchTime.now().uptimeNanoseconds + UInt64 (fpsDelay)),
-                execute: updateDisplay)
+            DispatchQueue.main.async { [weak self] in
+                self?.updateDisplay()
+            }
         }
     }
     
