@@ -1,0 +1,19 @@
+name: main-source-policy
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  enforce:
+    name: enforce
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require develop as the PR source for main
+        run: |
+          echo "base=${{ github.base_ref }} head=${{ github.head_ref }}"
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "Only pull requests from develop into main are allowed in phase 1." >&2
+            exit 1
+          fi
