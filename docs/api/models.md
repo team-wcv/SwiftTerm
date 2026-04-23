@@ -83,12 +83,9 @@ Represents the visible terminal content plus scrollback. The terminal maintains 
 | `scrollTop` | `Int` | Top of the scroll region |
 | `scrollBottom` | `Int` | Bottom of the scroll region |
 
-### Key Methods
+### Line Access
 
-| Method | Description |
-|--------|-------------|
-| `getLine(row:)` | Get a `BufferLine` for a viewport row |
-| `translateBufferLineToString(lineIndex:trimRight:)` | Extract a line as a string |
+> `Buffer` does not expose public methods for line access. Use `Terminal.getLine(row:)` to retrieve a `BufferLine` by viewport row. Internally, `Buffer.translateBufferLineToString(lineIndex:trimRight:)` converts a line to a string, but this is internal — use `BufferLine.translateToString(trimRight:startCol:endCol:)` on the returned line instead.
 
 ---
 
@@ -133,9 +130,10 @@ Represents a single terminal cell: a character, its display attribute, and its w
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `code` | `Character` | The Unicode grapheme cluster |
 | `attribute` | `Attribute` | Foreground, background, and style |
 | `width` | `Int8` | Display width: 1 (normal) or 2 (CJK/full-width) |
+
+> `code` is an internal `Int32` storing the Unicode scalar value (or a grapheme cluster index). Use `getCharacter()` to retrieve the cell's `Character`, or `Terminal.getCharacter(for:)` for extended grapheme clusters.
 
 ### Constants
 
