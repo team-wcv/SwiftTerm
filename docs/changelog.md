@@ -15,3 +15,7 @@ This project does not yet follow strict semantic versioning but aims for source-
 ### Fixed
 
 ### Removed
+
+### TODO
+
+- Expose `Terminal.buffers` / `BufferSet` as public API (currently `normalBuffer` and `altBuffer` are internal)

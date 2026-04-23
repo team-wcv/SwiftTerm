@@ -38,7 +38,6 @@ The core terminal emulator engine. Processes incoming byte streams, maintains bu
 | `cols` | `Int` | Current column count |
 | `rows` | `Int` | Current row count |
 | `buffer` | `Buffer` | Active buffer (normal or alternate) |
-| `buffers` | `BufferSet` | Normal + alternate buffer pair |
 | `options` | `TerminalOptions` | Configuration snapshot |
 | `hostCurrentDirectory` | `String?` | Last reported working directory (OSC 7) |
 | `mouseMode` | `MouseMode` | Current mouse reporting mode |
@@ -52,7 +51,7 @@ The core terminal emulator engine. Processes incoming byte streams, maintains bu
 | `resize(cols:rows:)` | Resize the terminal dimensions |
 | `getBufferAsData()` | Extract visible buffer content as `Data` |
 | `getLine(row:)` | Get a specific `BufferLine` by row index |
-| `getText(startRow:startCol:endRow:endCol:)` | Extract text from a region |
+| `getText(start:end:)` | Extract text from a region using `Position` values |
 | `installPalette(colors:)` | Install a custom 256-color palette |
 | `getEnvironmentVariables(termName:trueColor:)` | Build environment variables for child processes (static) |
 | `resetToInitialState()` | Full terminal reset |
@@ -70,7 +69,7 @@ The core terminal emulator engine. Processes incoming byte streams, maintains bu
 **File**: `Sources/SwiftTerm/Buffer.swift`
 **Declaration**: `public final class Buffer`
 
-Represents the visible terminal content plus scrollback. The terminal maintains two buffers (normal and alternate) via `BufferSet`.
+Represents the visible terminal content plus scrollback. The terminal maintains two buffers (normal and alternate), exposed via the `buffer` property and the `isCurrentBufferAlternate` flag.
 
 ### Key Properties
 
