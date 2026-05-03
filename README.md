@@ -255,3 +255,13 @@ that was licensed under a license that allowed for maximum reuse.
 Mac
 * [Anders Borum](https://github.com/palmin) has contributed reliability fixes, the sixel parser and changes required to put SwiftTerm to use in production.
 * [Miguel de Icaza](https://tirania.org/) -me- who have been looking for an excuse to write some Swift code.
+
+## TODO Audit
+
+Verified 2026-05-02 against `origin/develop` at `bb75c441cd66`. The scan covered `Package.swift`, `Sources/**`, `Tests/**`, package scripts, and the operator docs mirrored by EcosystemDocs.
+
+| Surface | Count | Evidence |
+| --- | ---: | --- |
+| Swift package surface | 3 | library `SwiftTerm`; executable products `SwiftTermFuzz` and `termcast`; targets `SwiftTerm`, `SwiftTermFuzz`, `Termcast`; test targets declared in `Package.swift`. |
+| Implementation `TODO` / `FIXME` / `HACK` markers | 36 | Markers in `Sources/SwiftTerm/**` and `Tests/SwiftTermTests/SgrTests.swift`; duplicated lowercase test fixture paths are not counted twice. |
+| Operator/prose sync markers | 0 | None. |
