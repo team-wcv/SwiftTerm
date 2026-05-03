@@ -8,8 +8,8 @@ orchestraitor:
   ticket: verify-todo-surfaces_481ee772
   task_url: null
 pr:
-  url: null
-  state: not-created
+  url: https://github.com/team-wcv/SwiftTerm/pull/11
+  state: open
 cleanup:
   merged_into: origin/develop
   archived_after: null
@@ -18,5 +18,5 @@ source_branches: []
 
 - Why this branch exists: verify TODO documentation counts and package surfaces against actual Swift source for the EcosystemDocs audit.
 - Changed paths: `docs/**`, `README.md`, or `AGENTS.md` as needed.
-- Validation run: pending.
+- Validation run: GitHub PR checks pass; review-comment sweep found no external comments as of 2026-05-03.
 - Known follow-ups: EcosystemDocs mirror sync follows after source docs are ready.
