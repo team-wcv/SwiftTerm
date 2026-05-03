@@ -263,5 +263,5 @@ Verified 2026-05-02 against `origin/develop` at `bb75c441cd66`. The scan covered
 | Surface | Count | Evidence |
 | --- | ---: | --- |
 | Swift package surface | 3 | library `SwiftTerm`; executable products `SwiftTermFuzz` and `termcast`; targets `SwiftTerm`, `SwiftTermFuzz`, `Termcast`; test targets declared in `Package.swift`. |
-| Implementation `TODO` / `FIXME` / `HACK` markers | 0 | None in `Sources/` or `Tests/`. |
+| Implementation `TODO` / `FIXME` / `HACK` markers | 36 | Markers in `Sources/SwiftTerm/**` and `Tests/SwiftTermTests/SgrTests.swift`; duplicated lowercase test fixture paths are not counted twice. |
 | Operator/prose sync markers | 0 | None. |

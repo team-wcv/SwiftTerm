@@ -18,5 +18,5 @@ source_branches: []
 
 - Why this branch exists: verify TODO documentation counts and package surfaces against actual Swift source for the EcosystemDocs audit.
 - Changed paths: `docs/**`, `README.md`, or `AGENTS.md` as needed.
-- Validation run: GitHub PR checks pass; review-comment sweep found no external comments as of 2026-05-03.
+- Validation run: GitHub PR checks pass; Codex P2 feedback addressed on 2026-05-03 and review re-requested.
 - Known follow-ups: EcosystemDocs mirror sync follows after source docs are ready.
