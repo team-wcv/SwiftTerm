@@ -201,30 +201,30 @@ Screenshots
 
 24 Bit Color 
 
-<img width="1246" alt="24 bit color" src="https://user-images.githubusercontent.com/36863/79060395-82181400-7c52-11ea-8f48-cd02323a8284.png">
+<img width="1246" alt="24 bit color" src="https://user-images.githubusercontent.com/36863/79060395-82181400-7c52-11ea-8f48-cd02323a8284.png" />
 
 Midnight Commander
 
-<img width="969" alt="Screen Shot 2020-04-12 at 12 17 49 AM" src="https://user-images.githubusercontent.com/36863/79060466-49c50580-7c53-11ea-8514-bb4a31359662.png">
+<img width="969" alt="Screen Shot 2020-04-12 at 12 17 49 AM" src="https://user-images.githubusercontent.com/36863/79060466-49c50580-7c53-11ea-8514-bb4a31359662.png" />
 
 Solid UTF-8 support, excellent rendering:
-<img width="799" alt="Screen Shot 2020-04-22 at 11 25 30 PM" src="https://user-images.githubusercontent.com/36863/80055786-95e43580-84f0-11ea-86dd-8dfb7f062b39.png">
+<img width="799" alt="Screen Shot 2020-04-22 at 11 25 30 PM" src="https://user-images.githubusercontent.com/36863/80055786-95e43580-84f0-11ea-86dd-8dfb7f062b39.png" />
 
-<img width="799" alt="Screen Shot 2020-04-22 at 11 25 24 PM" src="https://user-images.githubusercontent.com/36863/80055792-9977bc80-84f0-11ea-8cac-735d4a516a80.png">
+<img width="799" alt="Screen Shot 2020-04-22 at 11 25 24 PM" src="https://user-images.githubusercontent.com/36863/80055792-9977bc80-84f0-11ea-8cac-735d4a516a80.png" />
 
 Supports hyperlinks emitted by modern apps:
 
-<img width="674" alt="image" src="https://user-images.githubusercontent.com/36863/80055972-0b500600-84f1-11ea-9c57-41cadce67162.png">
+<img width="674" alt="image" src="https://user-images.githubusercontent.com/36863/80055972-0b500600-84f1-11ea-9c57-41cadce67162.png" />
 
 iOS support:
 
-<img width="981" alt="image" src="https://user-images.githubusercontent.com/36863/80056069-54a05580-84f1-11ea-8597-5a227c9c64a7.png">
+<img width="981" alt="image" src="https://user-images.githubusercontent.com/36863/80056069-54a05580-84f1-11ea-8597-5a227c9c64a7.png" />
 
 Sixel support:
 
-<img width="770" alt="image" src="https://user-images.githubusercontent.com/36863/115647346-97a62c00-a2f1-11eb-929a-f9d942cc0c09.png">
+<img width="770" alt="image" src="https://user-images.githubusercontent.com/36863/115647346-97a62c00-a2f1-11eb-929a-f9d942cc0c09.png" />
 
-<img width="568" alt="image" src="https://user-images.githubusercontent.com/36863/115647706-4e0a1100-a2f2-11eb-9bba-2a82503bca33.png">
+<img width="568" alt="image" src="https://user-images.githubusercontent.com/36863/115647706-4e0a1100-a2f2-11eb-9bba-2a82503bca33.png" />
 
 
 Resources 
@@ -255,3 +255,13 @@ that was licensed under a license that allowed for maximum reuse.
 Mac
 * [Anders Borum](https://github.com/palmin) has contributed reliability fixes, the sixel parser and changes required to put SwiftTerm to use in production.
 * [Miguel de Icaza](https://tirania.org/) -me- who have been looking for an excuse to write some Swift code.
+
+## TODO Audit
+
+Verified 2026-05-02 against `origin/develop` at `bb75c441cd66`. The scan covered `Package.swift`, `Sources/**`, `Tests/**`, package scripts, and the operator docs mirrored by EcosystemDocs.
+
+| Surface | Count | Evidence |
+| --- | ---: | --- |
+| Swift package surface | 3 | library `SwiftTerm`; executable products `SwiftTermFuzz` and `termcast`; targets `SwiftTerm`, `SwiftTermFuzz`, `Termcast`; test targets declared in `Package.swift`. |
+| Implementation `TODO` / `FIXME` / `HACK` markers | 36 | Markers in `Sources/SwiftTerm/**` and `Tests/SwiftTermTests/SgrTests.swift`; duplicated lowercase test fixture paths are not counted twice. |
+| Operator/prose sync markers | 0 | None. |
