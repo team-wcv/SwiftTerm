@@ -68,7 +68,7 @@ public required init?(coder: NSCoder)
 ---
 
 <a id="terminalview-ios"></a>
-## TerminalView (iOS / visionOS)
+## TerminalView (iOS / visionOS) {#terminalview-ios}
 
 **File**: `Sources/SwiftTerm/iOS/iOSTerminalView.swift`
 **Declaration**: `open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollViewDelegate, TerminalDelegate`
