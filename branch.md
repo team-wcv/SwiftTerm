@@ -1,33 +1,18 @@
-# branch: fix/views-terminalview-ios-anchor
+---
+branch: chore/6aa497fb-develop-only-ci
+created: 2026-09-11
+owner: codex-watch-rollout
+status: active
+scope: "Run expensive Swift build/test only after develop integration; gate automatic tags on successful CI"
+orchestraitor:
+  ticket: 6aa497fb6024b8c5ef1c6be8
+  plan: a2a598fd-ed67-459d-b1a3-1a710546a414
+pr:
+  state: pending
+  url: null
+---
 
-## Why
-
-EcosystemDocs `pnpm build` reports one broken anchor in the mirrored SwiftTerm
-docs:
-
-- `/repos/swiftterm/docs/api/views#terminalview-ios`
-
-The page `docs/api/views.md` uses HTML `<a id="...">` anchors for in-page
-navigation, but Docusaurus's broken-anchor validator only honors
-heading-derived slugs and explicit `{#slug}` heading annotations. The
-"Navigation" list links to `#terminalview-ios`, which is targeted via
-`<a id="terminalview-ios"></a>` above the `## TerminalView (iOS / visionOS)`
-heading. The heading's natural Docusaurus slug is `terminalview-ios--visionos`
-(the macOS heading happens to slug to `terminalview-macos`, which is why only
-the iOS link is flagged).
-
-## Fix
-
-Add an explicit `{#terminalview-ios}` to the `## TerminalView (iOS / visionOS)`
-heading so Docusaurus recognizes the slug used by the Navigation link.
-
-## Scope
-
-Single-file edit to `docs/api/views.md`. Existing `<a id="...">` HTML anchors
-are left in place to preserve compatibility with any consumer (e.g. raw GitHub
-rendering) that still relies on them.
-
-## Out of scope
-
-- Pushing the branch or opening a PR (per task instructions).
-- Reworking the broader `<a id="...">` pattern across other docs files.
+- User authorized develop-only build/test triggers across kits and App.
+- Preserve SDK/platform jobs, cheap PR checks, and separate release/documentation workflows.
+- Validation is static only; no macOS build, workflow dispatch, merge, branch-rule mutation, or product-code change.
+- Hold first push/PR until coordinated shared after-CI tag integration is included.
