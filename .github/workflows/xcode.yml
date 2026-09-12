@@ -3,6 +3,16 @@ name: Swift
 on:
   push:
     branches: [develop]
+    paths-ignore:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'CONTRIBUTING.md'
+      - 'CODE_OF_CONDUCT.md'
+      - 'LICENSE'
+      - 'LICENSE.md'
+      - 'branch.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
@@ -11,6 +21,7 @@ jobs:
   build:
 
     runs-on: macos-15
+    timeout-minutes: 25
 
     steps:
     - uses: actions/checkout@v4
