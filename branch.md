@@ -8,8 +8,8 @@ orchestraitor:
   ticket: 6aa497fb6024b8c5ef1c6be8
   plan: a2a598fd-ed67-459d-b1a3-1a710546a414
 pr:
-  state: pending
-  url: null
+  state: open
+  url: https://github.com/team-wcv/SwiftTerm/pull/14
 ---
 
 - User authorized develop-only build/test triggers across kits and App.
