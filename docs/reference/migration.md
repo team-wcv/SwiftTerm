@@ -12,12 +12,14 @@ SwiftTerm is a **team-wcv maintained fork** of [migueldeicaza/SwiftTerm](https:/
 | **Maintainer** | Miguel de Icaza | team-wcv |
 | **Primary consumers** | Community (Secure Shellfish, La Terminal, CodeEdit, etc.) | TerminalKit, OrchestraitorApp |
 
-The fork tracks the upstream `main` branch and periodically merges changes.
+The fork tracks the upstream **1.x release line**. The last sync merged upstream `v1.20.0` (2026-09-26),
+the final 1.x release. Upstream `main` is SwiftTerm 2.0 (Swift 6 language mode, `getTerminal()` removed),
+which is an API migration for TerminalKit rather than a sync.
 
 <a id="sync-policy"></a>
 ## Upstream Sync Policy
 
-1. **Periodic merge**: Upstream changes are merged into the fork's `main` branch on a regular cadence (typically when upstream publishes notable fixes or features).
+1. **Periodic merge**: Upstream changes are merged into the fork's `develop` branch on a regular cadence (typically when upstream publishes notable fixes or features).
 2. **Cherry-pick for urgency**: Critical bug fixes from upstream may be cherry-picked between full syncs.
 3. **Conflict resolution**: Fork-specific changes take precedence in conflicts. Upstream changes are adapted to fit fork conventions.
 4. **No force-push**: The fork maintains a linear merge history. Upstream syncs are merge commits, not rebases.
@@ -32,11 +34,20 @@ The fork tracks the upstream `main` branch and periodically merges changes.
 
 ### Code Changes
 
-Fork-specific changes are kept minimal to reduce merge friction. Current divergences:
+Fork-specific changes are kept minimal to reduce merge friction. Current divergences from upstream `v1.20.0`:
 
-- **Bug fixes** that have been submitted as upstream PRs but not yet merged.
-- **Build configuration** tweaks for the team-wcv CI pipeline.
-- **Minor API additions** needed by TerminalKit that are not yet upstreamed.
+| Change | Files | Why it is still carried |
+|--------|-------|-------------------------|
+| Absolute `savedY` (from e1e09d0) | `Buffer.swift`, `Terminal.swift`, `BufferTests.swift` | Upstream still saves a viewport row but trims and reflows `savedY` as an absolute row, so DECSC/DECRC drift once scrollback exists. |
+| iOS dirty-row invalidation (reworks cd6fb70) | `Apple/AppleTerminalView.swift` | Upstream repaints the whole iOS view on every update when the Metal renderer is off. |
+| iOS pan-to-wheel in mouse mode (iOS half of 3542889) | `iOS/iOSTerminalView.swift` | Upstream's line-accurate wheel (#600) is macOS only; iOS still sends a button-1 drag. |
+| Shader source bundled with `.copy` | `Package.swift` | `.process` needs the separately installed Metal Toolchain (Xcode 26+) on every build; the renderer compiles the source at runtime. |
+
+Fork patches dropped at the v1.20.0 sync because upstream now covers them: the Shift-Tab `SendData` fix
+(upstream #473), the macOS scroll-wheel reports (upstream #600 and DECSET 1007), the 16.67 ms throttle
+removal (upstream displays immediately after user input), the `layoutSubviews` repaint removal (it left
+scrolled-in rows unpainted), the smoke-test script and the benchmark-dependency removal (upstream gates
+the benchmark target off).
 
 All fork-specific code changes are tagged with comments referencing the divergence reason when non-obvious.
 
