@@ -22,7 +22,6 @@ import SwiftUI
 import MetalKit
 #endif
 
-@available(iOS 14.0, *)
 internal var log: Logger = Logger(subsystem: "org.tirania.SwiftTerm", category: "msg")
 
 public extension Notification.Name {
@@ -393,6 +392,21 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         didFinishSetup = true
     }
 
+    open override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard previousTraitCollection?.horizontalSizeClass != traitCollection.horizontalSizeClass
+                || previousTraitCollection?.verticalSizeClass != traitCollection.verticalSizeClass,
+              let accessory = terminalAccessory else {
+            return
+        }
+        let height = accessoryBarHeight
+        guard accessory.frame.height != height else { return }
+        accessory.frame.size.height = height
+        if isFirstResponder {
+            reloadInputViews()
+        }
+    }
+
     open override func didMoveToWindow() {
         super.didMoveToWindow()
         updateTextBlinkLifecycle()
@@ -689,18 +703,13 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         let bar = TerminalProgressBarView(frame: .zero)
         bar.isHidden = true
         addSubview(bar)
-        if #available(iOS 11.0, visionOS 1.0, *) {
-            bar.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                bar.topAnchor.constraint(equalTo: frameLayoutGuide.topAnchor),
-                bar.leadingAnchor.constraint(equalTo: frameLayoutGuide.leadingAnchor),
-                bar.trailingAnchor.constraint(equalTo: frameLayoutGuide.trailingAnchor),
-                bar.heightAnchor.constraint(equalToConstant: 2)
-            ])
-        } else {
-            bar.autoresizingMask = [.flexibleWidth, .flexibleBottomMargin]
-            bar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 2)
-        }
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: frameLayoutGuide.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: frameLayoutGuide.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: frameLayoutGuide.trailingAnchor),
+            bar.heightAnchor.constraint(equalToConstant: 2)
+        ])
         progressBarView = bar
     }
 
@@ -841,21 +850,48 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     ///  - pos: the location where this was triggered in the buffer, it used at a later point
     ///  to auto-select a word
     func showContextMenu (forRegion: CGRect, pos: Position) {
-        var items: [UIMenuItem] = []
-        
         lastLongSelect = pos
         lastLongSelectRegion = forRegion
 
-        //GAR: Declutter context menu
-        //items.append (UIMenuItem(title: "Reset", action: #selector(resetCmd)))
-        
-        // Configure the shared menu controller
-        let menuController = UIMenuController.shared
-        menuController.menuItems = items
-        
-        // Set the location of the menu in the view.
-        //let menuLocation = CGRect (origin: at, size: CGSize (width: cellDimension.width, height: cellDimension.height))
-        menuController.showMenu(from: self, rect: forRegion)
+        // The menu lists the standard edit actions this view accepts in
+        // canPerformAction(_:withSender:): Copy, Paste, Select and Select All.
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            editMenuPresenter.present(avoiding: forRegion)
+        } else {
+            let menuController = UIMenuController.shared
+            menuController.menuItems = []
+            menuController.showMenu(from: self, rect: forRegion)
+        }
+    }
+
+    /// Backing store for `editMenuPresenter`. Stored properties cannot carry an availability
+    /// annotation, so this holds a `TerminalEditMenuPresenter` (iOS 16 and later) untyped.
+    private var editMenuPresenterStorage: AnyObject?
+
+    @available(iOS 16.0, visionOS 1.0, *)
+    var editMenuPresenter: TerminalEditMenuPresenter {
+        if let presenter = editMenuPresenterStorage as? TerminalEditMenuPresenter {
+            return presenter
+        }
+        let presenter = TerminalEditMenuPresenter(view: self)
+        editMenuPresenterStorage = presenter
+        return presenter
+    }
+
+    /// Whether the edit menu is on screen.
+    var isEditMenuVisible: Bool {
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            return (editMenuPresenterStorage as? TerminalEditMenuPresenter)?.isVisible ?? false
+        }
+        return UIMenuController.shared.isMenuVisible
+    }
+
+    func hideEditMenu () {
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            (editMenuPresenterStorage as? TerminalEditMenuPresenter)?.dismiss()
+        } else {
+            UIMenuController.shared.hideMenu()
+        }
     }
     
     // This is a position relative to the buffer
@@ -1038,8 +1074,8 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
                     selection.selectNone()
                     disableSelectionPanGesture()
                 }
-                if UIMenuController.shared.isMenuVisible {
-                    UIMenuController.shared.hideMenu()
+                if isEditMenuVisible {
+                    hideEditMenu()
                 } else {
                     let location = gestureRecognizer.location(in: gestureRecognizer.view)
                     let tapLoc = calculateTapHit(gesture: gestureRecognizer).grid
@@ -1374,19 +1410,14 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     func setupLinkReportingInteractions ()
     {
-        if #available(iOS 13.4, visionOS 1.0, *) {
-            let interaction = UIPointerInteraction(delegate: self)
-            addInteraction(interaction)
-            pointerInteraction = interaction
-        }
-        if #available(iOS 13.0, visionOS 1.0, *) {
-            let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
-            addGestureRecognizer(hover)
-            hoverGesture = hover
-        }
+        let interaction = UIPointerInteraction(delegate: self)
+        addInteraction(interaction)
+        pointerInteraction = interaction
+        let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
+        addGestureRecognizer(hover)
+        hoverGesture = hover
     }
 
-    @available(iOS 13.4, visionOS 1.0, *)
     public func pointerInteraction(_ interaction: UIPointerInteraction, regionFor request: UIPointerRegionRequest, defaultRegion: UIPointerRegion) -> UIPointerRegion?
     {
         lastPointerLocation = request.location
@@ -1503,10 +1534,25 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         }
     }
 
+    /// Whether `traits` describe an Expanded scene: regular width *and* regular height.
+    ///
+    /// That is an iPad or the inner display of an unfolded foldable, whatever the device idiom
+    /// says; an iPhone in landscape is regular width but compact height and stays compact. The
+    /// keyboard accessory sizes itself from this instead of the device idiom.
+    static func isExpanded(_ traits: UITraitCollection) -> Bool {
+        traits.horizontalSizeClass == .regular && traits.verticalSizeClass == .regular
+    }
+
+    /// Accessory bar height for the current size classes. Before the view is in a window its
+    /// size classes are unspecified, so this starts compact and traitCollectionDidChange(_:)
+    /// corrects it once the scene's traits arrive.
+    var accessoryBarHeight: CGFloat {
+        TerminalView.isExpanded(traitCollection) ? 48 : 36
+    }
+
     func setupAccessoryView ()
     {
-        let short = UIDevice.current.userInterfaceIdiom == .phone
-        let ta = TerminalAccessory(frame: CGRect(x: 0, y: 0, width: frame.width, height: short ? 36 : 48),
+        let ta = TerminalAccessory(frame: CGRect(x: 0, y: 0, width: frame.width, height: accessoryBarHeight),
                                    inputViewStyle: .keyboard, container: self)
         #if !os(visionOS)
         inputAssistantItem.leadingBarButtonGroups = []
@@ -1740,8 +1786,6 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     }
     
     func scale (image: UIImage, size: CGSize) -> UIImage {
-        UIGraphicsBeginImageContext(size)
-        
         let srcRatio = image.size.height/image.size.width
         let scaledRatio = size.width/size.height
         
@@ -1754,11 +1798,14 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             let nh = (size.width * image.size.height) / image.size.width
             dstRect = CGRect (x: 0, y: (size.height-nh)/2, width: size.width, height: nh)
         }
-        image.draw (in: dstRect)
-        
-        let ret = UIGraphicsGetImageFromCurrentImageContext() ?? image
-        UIGraphicsEndImageContext()
-        return ret
+        // One pixel per point, transparent, 8-bit: what UIGraphicsBeginImageContext produced.
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = 1
+        format.opaque = false
+        format.preferredRange = .standard
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw (in: dstRect)
+        }
     }
     
     func drawImageInStripe (image: TTImage, srcY: CGFloat, width: CGFloat, srcHeight: CGFloat, dstHeight: CGFloat, size: CGSize) -> TTImage? {
@@ -1770,18 +1817,18 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         
         let destRect = CGRect(x: 0, y: 0, width: width, height: dstHeight)
         
-        UIGraphicsBeginImageContextWithOptions(size, false, 0.0)
-        guard let ctx = UIGraphicsGetCurrentContext() else {
-            return nil
+        // Rendered at the scale of the display the view is on (the old context used scale 0,
+        // meaning the main screen's).
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = backingScaleFactor()
+        format.opaque = false
+        format.preferredRange = .standard
+        return UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+            let ctx = rendererContext.cgContext
+            ctx.translateBy(x: 0, y: dstHeight)
+            ctx.scaleBy(x: 1, y: -1)
+            uicrop.draw(in: destRect)
         }
-        ctx.translateBy(x: 0, y: dstHeight)
-        ctx.scaleBy(x: 1, y: -1)
-
-        uicrop.draw(in: destRect)
-        
-        let stripe = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return stripe
     }
 
     open func scrolled(source terminal: Terminal, yDisp: Int) {
@@ -1969,7 +2016,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         #if os(visionOS)
         1.0
         #else
-        UIScreen.main.scale
+        // The trait collection carries the scale of the display the view is actually on,
+        // which the main screen is not once a scene can live on another display. Before the
+        // view has traits, contentScaleFactor (UIKit seeds it with the display scale) stands in.
+        let scale = traitCollection.displayScale
+        return scale > 0 ? scale : max(contentScaleFactor, 1)
         #endif
     }
     
@@ -3357,7 +3408,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 #endif
             
             if !self.selection.active {
-                UIMenuController.shared.hideMenu()
+                self.hideEditMenu()
                 self.selection.selectNone()
                 self.disableSelectionPanGesture()
             }
@@ -3692,5 +3743,53 @@ extension TerminalView: UIAccessibilityReadingContent {
     }
 }
 #endif
+
+/// Presents the system edit menu for a ``TerminalView`` with `UIEditMenuInteraction`, which
+/// replaces `UIMenuController` from iOS 16. The menu's actions come from the view's
+/// `canPerformAction(_:withSender:)`; this object only places the menu and tracks visibility.
+@available(iOS 16.0, visionOS 1.0, *)
+@MainActor
+// UIKit calls the delegate on the main thread; @preconcurrency checks that at runtime.
+final class TerminalEditMenuPresenter: NSObject, @preconcurrency UIEditMenuInteractionDelegate {
+    private var interaction: UIEditMenuInteraction?
+    /// The region the menu points at and avoids covering, in the view's coordinates.
+    private var targetRect: CGRect = .zero
+    private(set) var isVisible = false
+
+    init(view: UIView) {
+        super.init()
+        let interaction = UIEditMenuInteraction(delegate: self)
+        view.addInteraction(interaction)
+        self.interaction = interaction
+    }
+
+    func present(avoiding region: CGRect) {
+        targetRect = region
+        let configuration = UIEditMenuConfiguration(identifier: nil,
+                                                    sourcePoint: CGPoint(x: region.midX, y: region.minY))
+        interaction?.presentEditMenu(with: configuration)
+    }
+
+    func dismiss() {
+        interaction?.dismissMenu()
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+                             targetRectFor configuration: UIEditMenuConfiguration) -> CGRect {
+        targetRect
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+                             willPresentMenuFor configuration: UIEditMenuConfiguration,
+                             animator: UIEditMenuInteractionAnimating) {
+        isVisible = true
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+                             willDismissMenuFor configuration: UIEditMenuConfiguration,
+                             animator: UIEditMenuInteractionAnimating) {
+        isVisible = false
+    }
+}
 
 #endif
