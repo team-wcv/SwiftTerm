@@ -21,16 +21,56 @@ public final class BufferLine: CustomDebugStringConvertible {
         /// Renders the bottom of a character, using two cells
         case doubledDown
     }
-    var isWrapped: Bool
-    var renderMode: RenderLineMode = .single
+    /// True when this line is a continuation of the previous line: the text
+    /// soft-wrapped onto it rather than starting after an explicit newline.
+    public internal(set) var isWrapped: Bool { didSet { bump() } }
+    /// BiDi state for the paragraph that contains this row.
+    public internal(set) var bidiState: BidiPresentationState { didSet { bump() } }
+    var renderMode: RenderLineMode = .single { didSet { bump() } }
+    /// Shell-authored OSC 133 marks on this line, at most one per kind.
+    /// A line can carry both a left prompt and a right prompt mark.
+    private(set) var semanticMarks: [SemanticMark] = [] { didSet { bump() } }
+    /// The prompt-group epoch of a line created by a hard line feed inside a
+    /// prompt group: the active group ID at stamp time, or nil for a line that
+    /// is not a hard continuation. Together with `isWrapped` this is what makes
+    /// a row derivable as a continuation, and the group ID is what keeps an old
+    /// group's stranded rows from joining a new prompt (R1/R5). Exactly one
+    /// function assigns it: `Terminal.finishSemanticLineAdvance`.
+    ///
+    /// It is structural, not content: cell erasure (EL/ED) never touches it.
+    /// Derivation-only metadata, not drawn, so it bumps the render generation
+    /// only on an actual change.
+    var semanticHardContinuationGroup: UInt64? = nil {
+        didSet { if semanticHardContinuationGroup != oldValue { bump() } }
+    }
+    /// Weak link to the owning buffer, used only so `copyFrom` can ask which
+    /// of two colliding same-kind marks is the live origin. Lines that never
+    /// carry marks (bare templates) leave this nil.
+    weak var owningBuffer: Buffer?
+    /// Bumped each time this line object is reused for different content
+    /// (recycle, reset). A deferred pointer click captures this alongside the
+    /// line identity; a mismatch at fire time means the object was recycled
+    /// into a new row and the click must be dropped — identity alone cannot
+    /// tell, because `CircularList.recycle` keeps the object in the array.
+    private(set) var recycleGeneration: UInt64 = 0
     private var data: UnsafeMutableBufferPointer<CharData>
     private var dataSize: Int
 
     private var fillCharacter: CharData //used to initialise data
 
-    var images: [TerminalImage]?
+    var images: [TerminalImage]? { didSet { bump() } }
 
-    public init (cols: Int, fillData: CharData? = nil, isWrapped: Bool = false)
+    /// Monotonically increasing counter incremented on every mutation of this line's
+    /// contents (cells, isWrapped, renderMode, images). Renderers that cache per-line
+    /// draw state can compare this counter against a cached value to detect in-place
+    /// changes without diffing individual cells.
+    public private(set) var generation: UInt64 = 0
+
+    @inline(__always)
+    private func bump() { generation &+= 1 }
+
+    public init (cols: Int, fillData: CharData? = nil, isWrapped: Bool = false,
+                 bidiState: BidiPresentationState = .default)
     {
         self.fillCharacter = (fillData == nil) ? CharData.Null : fillData!
         let buf = UnsafeMutableBufferPointer<CharData>.allocate(capacity: cols)
@@ -38,17 +78,31 @@ public final class BufferLine: CustomDebugStringConvertible {
         data = buf
         dataSize = cols
         self.isWrapped = isWrapped
+        self.bidiState = bidiState
     }
 
     public init (from other: BufferLine)
     {
         fillCharacter = other.fillCharacter
         isWrapped = other.isWrapped
+        bidiState = other.bidiState
         renderMode = other.renderMode
+        semanticMarks = other.semanticMarks
+        semanticHardContinuationGroup = other.semanticHardContinuationGroup
+        // owningBuffer is NOT inherited: a clone is stamped with its real
+        // owner when it is attached to a buffer (B.3). Inheriting it from a
+        // cross-buffer template leaks the wrong owner.
         images = other.images
         let otherSize = other.dataSize
         let buf = UnsafeMutableBufferPointer<CharData>.allocate(capacity: otherSize)
+        #if os(Linux) || os(Windows)
+        for i in 0..<otherSize {
+            buf.initializeElement(at: i, to: other.data[i])
+        }
+        #else
         _ = buf.initialize(fromContentsOf: other.data[0..<otherSize])
+        #endif
+        
         data = buf
         dataSize = otherSize
     }
@@ -90,6 +144,7 @@ public final class BufferLine: CustomDebugStringConvertible {
             } else {
                 data[index] = value
             }
+            bump()
         }
     }
 
@@ -98,10 +153,21 @@ public final class BufferLine: CustomDebugStringConvertible {
         return Int (data [index].width)
     }
 
+    /// Erases the cell contents. Marks are line-level metadata and survive
+    /// this: destruction of a recycled line goes through `destroySemanticState`.
     func clear(with attribute: Attribute) {
         let empty = CharData(attribute: attribute)
         data.update(repeating: empty)
         images = nil
+        recycleGeneration &+= 1
+        bump()
+    }
+
+    /// Removes the semantic prompt metadata. Called only when the line
+    /// itself is destroyed (recycled for reuse), never by cell mutations.
+    func destroySemanticState() {
+        semanticMarks.removeAll(keepingCapacity: true)
+        semanticHardContinuationGroup = nil
     }
     /// Test whether contains any chars.
     public func hasContent (index: Int) -> Bool {
@@ -139,6 +205,8 @@ public final class BufferLine: CustomDebugStringConvertible {
                 data [i] = fillData
             }
         }
+        marksShift(from: pos, by: n, rightMargin: rightMargin)
+        bump()
     }
 
     /// Removes the cells at the specified position, shifting data leftwards
@@ -158,9 +226,51 @@ public final class BufferLine: CustomDebugStringConvertible {
                 data [i] = fillData
             }
         }
+        marksShift(from: pos, by: -n, rightMargin: rightMargin)
+        bump()
     }
 
-    /// Replaces the cells in the start to end range with the specified fill data
+    /// Shifts mark columns with their cells when ICH inserts or DCH deletes
+    /// cells at `pos` inside the margin. Marks are never removed here: a mark
+    /// whose cell was deleted lands on `pos`, one pushed past the margin
+    /// stays on the margin.
+    func marksShift(from pos: Int, by delta: Int, rightMargin: Int) {
+        guard delta != 0, !semanticMarks.isEmpty else { return }
+        semanticMarks = semanticMarks.map { mark in
+            guard mark.column >= pos, mark.column <= rightMargin else { return mark }
+            var result = mark
+            result.column = min(max(mark.column + delta, pos), rightMargin)
+            return result
+        }
+    }
+
+    /// Clamps every mark column into the line's content width, for shrinking
+    /// resizes. A zero-width line can hold no marks.
+    func marksClampTo(width: Int) {
+        guard !semanticMarks.isEmpty else { return }
+        if width <= 0 {
+            semanticMarks.removeAll(keepingCapacity: true)
+            return
+        }
+        semanticMarks = semanticMarks.map { mark in
+            var result = mark
+            result.column = min(max(mark.column, 0), width - 1)
+            return result
+        }
+    }
+
+    /// Stores a shell-authored mark. Setting a mark of a kind the line
+    /// already carries replaces that mark: readline redisplay re-emits `A`
+    /// on the same row on every repaint.
+    func setSemanticMark(kind: SemanticPromptKind, column: Int, group: UInt64) {
+        semanticMarks.removeAll { $0.kind == kind }
+        semanticMarks.append(SemanticMark(kind: kind, column: column, group: group))
+        semanticMarks.sort { $0.column < $1.column }
+    }
+
+    /// Replaces the cells in the start to end range with the specified fill data.
+    /// Cell erasure never touches the continuation epoch (R1: structural, not
+    /// content).
     public func replaceCells (start: Int, end: Int, fillData : CharData)
     {
         let length = dataSize
@@ -169,6 +279,7 @@ public final class BufferLine: CustomDebugStringConvertible {
             data [idx] = fillData
             idx += 1
         }
+        bump()
     }
 
     /// Resizes the buffer line, if the new size is larger, the empty region is filled with
@@ -179,13 +290,24 @@ public final class BufferLine: CustomDebugStringConvertible {
         if len == cols {
             return
         }
+        defer { bump() }
 
         if cols > len {
             let newBuf = UnsafeMutableBufferPointer<CharData>.allocate(capacity: cols)
+            
             // Copy existing data
+#if os(Linux) || os(Windows)
+            if len > 0 {
+                for i in 0..<len {
+                    newBuf.initializeElement(at: i, to: data[i])
+                }
+            }
+#else
             if len > 0 {
                 _ = newBuf.initialize(fromContentsOf: data[0..<len])
             }
+#endif
+            
             // Fill remainder with fillData
             for i in len..<cols {
                 newBuf.initializeElement(at: i, to: fillData)
@@ -196,7 +318,13 @@ public final class BufferLine: CustomDebugStringConvertible {
         } else {
             if cols > 0 {
                 let newBuf = UnsafeMutableBufferPointer<CharData>.allocate(capacity: cols)
+#if os(Linux) || os(Windows)
+                for i in 0..<cols {
+                    newBuf.initializeElement(at: i, to: data[i])
+                }
+#else
                 _ = newBuf.initialize(fromContentsOf: data[0..<cols])
+#endif
                 data.deinitialize()
                 data.deallocate()
                 data = newBuf
@@ -207,6 +335,7 @@ public final class BufferLine: CustomDebugStringConvertible {
                 data = UnsafeMutableBufferPointer<CharData>.allocate(capacity: 0)
                 dataSize = 0
             }
+            marksClampTo(width: cols)
         }
     }
 
@@ -214,6 +343,7 @@ public final class BufferLine: CustomDebugStringConvertible {
     public func fill (with: CharData)
     {
         data.update(repeating: with)
+        bump()
     }
 
     /// Fills the specified region of the bufferline with the specified ``CharData``
@@ -226,6 +356,7 @@ public final class BufferLine: CustomDebugStringConvertible {
         for i in 0..<len {
             data [i+atCol] = with
         }
+        bump()
     }
 
     /// Fills the current BufferLine with the contents of another BufferLine.
@@ -236,7 +367,13 @@ public final class BufferLine: CustomDebugStringConvertible {
             data.deinitialize()
             data.deallocate()
             let newBuf = UnsafeMutableBufferPointer<CharData>.allocate(capacity: srcSize)
+#if os(Linux) || os(Windows)
+            for i in 0..<srcSize {
+                newBuf.initializeElement(at: i, to: line.data[i])
+            }
+#else
             _ = newBuf.initialize(fromContentsOf: line.data[0..<srcSize])
+#endif
             data = newBuf
         } else {
             for i in 0..<srcSize {
@@ -245,6 +382,10 @@ public final class BufferLine: CustomDebugStringConvertible {
         }
         dataSize = srcSize
         isWrapped = line.isWrapped
+        semanticMarks = line.semanticMarks
+        semanticHardContinuationGroup = line.semanticHardContinuationGroup
+        bidiState = line.bidiState
+        bump()
     }
 
     /// Returns the trimmed length in terms of cells used from the BufferLine
@@ -267,6 +408,8 @@ public final class BufferLine: CustomDebugStringConvertible {
     ///  - len: the number of elements to copy
     public func copyFrom (_ src: BufferLine, srcCol: Int, dstCol: Int, len: Int)
     {
+        let movesSemanticHardContinuation = srcCol == 0 && dstCol == 0 && len >= count
+        let movedSemanticHardContinuationGroup = src.semanticHardContinuationGroup
         if src === self && srcCol > dstCol {
             // Overlapping forward copy: go left-to-right (already safe)
             for i in 0..<len {
@@ -282,6 +425,72 @@ public final class BufferLine: CustomDebugStringConvertible {
                 data[dstCol + i] = src.data[srcCol + i]
             }
         }
+        // Marks travel with their cells. The margin-scroll paths and reflow
+        // shuffle cell ranges between line objects through this call, and a
+        // mark's row is wherever its cells went: this moves marks, it never
+        // authors them. Marks outside the copied range stay where they are.
+        let moved = src.semanticMarks.filter { $0.column >= srcCol && $0.column < srcCol + len }
+        // Snapshot the live origin before the marks move, so a same-kind
+        // collision can be resolved by liveness rather than position. Skipped
+        // entirely on the common no-marks scroll row (E.5).
+        let origin = moved.isEmpty ? nil : owningBuffer?.rawSemanticOrigin()
+        if src === self {
+            semanticMarks.removeAll {
+                ($0.column >= srcCol && $0.column < srcCol + len) ||
+                ($0.column >= dstCol && $0.column < dstCol + len)
+            }
+        } else {
+            src.semanticMarks.removeAll { $0.column >= srcCol && $0.column < srcCol + len }
+            semanticMarks.removeAll { $0.column >= dstCol && $0.column < dstCol + len }
+        }
+        if !moved.isEmpty {
+            var originMovedHere = false
+            for mark in moved {
+                let newColumn = mark.column - srcCol + dstCol
+                let movedIsOrigin = origin.map {
+                    $0.line === src && $0.kind == mark.kind && $0.column == mark.column
+                } ?? false
+                if let idx = semanticMarks.firstIndex(where: { $0.kind == mark.kind }) {
+                    // A same-kind mark outside the copied destination range did
+                    // not move. The live origin always wins the collision: if
+                    // the origin is the mark that moved here, it displaces the
+                    // stationary one; otherwise the stationary mark is kept
+                    // (it is the origin, or — absent origin info — the
+                    // conservative choice) and the moved duplicate is dropped.
+                    let stationaryIsOrigin = origin.map {
+                        $0.line === self && $0.kind == mark.kind && $0.column == semanticMarks[idx].column
+                    } ?? false
+                    if movedIsOrigin && !stationaryIsOrigin {
+                        semanticMarks.remove(at: idx)
+                        semanticMarks.append(SemanticMark(kind: mark.kind, column: newColumn,
+                                                          group: mark.group))
+                        originMovedHere = true
+                    }
+                } else {
+                    semanticMarks.append(SemanticMark(kind: mark.kind, column: newColumn,
+                                                      group: mark.group))
+                    if movedIsOrigin {
+                        originMovedHere = true
+                    }
+                }
+            }
+            semanticMarks.sort { $0.column < $1.column }
+            if originMovedHere, src !== self {
+                // The origin's cells now live on this line; follow them so
+                // the getter binds to this object instead of relying on the
+                // rebind heuristic.
+                owningBuffer?.reassignSemanticOrigin(to: self)
+            }
+        }
+        // A full-width copy moves the continuation epoch with the content; a
+        // narrow-margin copy leaves it (R1: dead clicks over injection).
+        if movesSemanticHardContinuation {
+            semanticHardContinuationGroup = movedSemanticHardContinuationGroup
+            if src !== self {
+                src.semanticHardContinuationGroup = nil
+            }
+        }
+        bump()
     }
 
     /// Returns the contents of the line as a string in the specified range

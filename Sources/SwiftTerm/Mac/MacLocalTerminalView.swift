@@ -73,7 +73,14 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate, LocalPr
         super.init (frame: frame)
         setup ()
     }
-    
+
+    /// Creates a local process terminal view with explicit startup options for the underlying `Terminal`
+    public override init (frame: CGRect, font: NSFont? = nil, options: TerminalOptions)
+    {
+        super.init (frame: frame, font: font, options: options)
+        setup ()
+    }
+
     public required init? (coder: NSCoder)
     {
         super.init (coder: coder)
@@ -112,6 +119,13 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate, LocalPr
         }
     }
     
+    public func clipboardRead(source: TerminalView) -> Data? {
+        guard let str = NSPasteboard.general.string(forType: .string) else {
+            return nil
+        }
+        return str.data(using: .utf8)
+    }
+    
     /**
      * Invoke this method to notify the processDelegate of the new title for the terminal window
      */
@@ -122,7 +136,14 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate, LocalPr
     public func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
         processDelegate?.hostCurrentDirectoryUpdate(source: source, directory: directory)
     }
-    
+
+    /**
+     * Invoked when the user activates a link, override to handle the link yourself
+     */
+    open func requestOpenLink (source: TerminalView, link: String, params: [String:String])
+    {
+        openLink (link)
+    }
 
     /**
      * This method is invoked when input from the user needs to be sent to the client
@@ -160,6 +181,9 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate, LocalPr
      */
     public func startProcess(executable: String = "/bin/bash", args: [String] = [], environment: [String]? = nil, execName: String? = nil, currentDirectory: String? = nil)
     {
+        // A nil environment keeps the LocalProcess default (TERM=xterm-256color);
+        // hosts that want options.termName in the child's environment pass
+        // Terminal.getEnvironmentVariables(termName:) explicitly
         process.startProcess(executable: executable, args: args, environment: environment, execName: execName, currentDirectory: currentDirectory)
     }
 
@@ -189,8 +213,10 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate, LocalPr
      */
     open func getWindowSize () -> winsize
     {
-        let f: CGRect = self.frame
-        return winsize(ws_row: UInt16(terminal.rows), ws_col: UInt16(terminal.cols), ws_xpixel: UInt16 (f.width), ws_ypixel: UInt16 (f.height))
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 1
+        let pxW = Int((cellDimension?.width ?? 0) * CGFloat(terminal.cols) * scale)
+        let pxH = Int((cellDimension?.height ?? 0) * CGFloat(terminal.rows) * scale)
+        return winsize(ws_row: UInt16(terminal.rows), ws_col: UInt16(terminal.cols), ws_xpixel: UInt16(pxW), ws_ypixel: UInt16(pxH))
     }
 }
 

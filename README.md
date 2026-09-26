@@ -24,6 +24,9 @@ on iOS to run) and includes a login UI to configure the connection.
 
 ## Companion Apps
 
+[Tecolot](https://github.com/migueldeicaza/Tecolot) is a MacOS Terminal.app 
+replacement.
+
 [SwiftTermApp](https://github.com/migueldeicaza/SwiftTermApp) builds
 an actual iOS app that uses this library and is more complete than the
 testing apps in this module and provides a proper configuration UI.
@@ -42,11 +45,15 @@ Selection/Accessibility) as it handles UTF, Unicode and grapheme clusters better
 than those and has a more complete coverage of terminal emulation.   XtermSharp
 is generally attempting to keep up, but has lagged behind.
 
+Plenty of test cases have been extracted from xterm.js and Ghostty and
+this also relies extensively on `esctest` to ensure compatibility.
+
 Features
 ========
 
 * Pretty decent terminal emulation, on or better than XtermSharp and xterm.js (and more comprehensive in many ways)
 * Unicode rendering (including Emoji, and combining characters and emoji)
+* Bidirectional text (Arabic, Hebrew) following the [terminal-wg BiDi recommendation](https://terminal-wg.pages.freedesktop.org/bidi/), with Arabic contextual shaping
 * Reusable and pluggable engine allows multiple user interfaces to be built on top of it:
    *  Bundled MacOS and iOS
    *  Bundled Headless terminal.
@@ -68,7 +75,22 @@ Features
 * Terminal session recording and playback with termcast
 * Thread-safe Terminal instances
 * Fuzzed and abused
+* Optional GPU-accelerated rendering via Metal (macOS, iOS, visionOS)
 * Seems pretty fast to me
+
+### Image formats
+
+SwiftTerm supports these image data formats:
+
+* **Sixel** image streams.
+* **PNG** images through the iTerm2 and Kitty graphics protocols.
+* **JPEG** images through the iTerm2 graphics protocol.
+* **Raw RGB** (24-bit) and **RGBA** (32-bit) pixel data through the Kitty
+  graphics protocol.
+
+For iTerm2 images, the Apple views use the system image decoder. Other image
+formats that the target platform can decode can also work, but PNG and JPEG
+are the tested formats.
 
 # SwiftTerm library
 
@@ -110,6 +132,23 @@ connecting to a remote system is with SSH.
 ## Shared Code between MacOS and iOS
 
 The iOS and UIKit code share a lot of the code, that code lives under the Apple directory.
+
+### Link Reporting in Apple Views
+
+Both AppKit and UIKit `TerminalView` expose `linkReporting`:
+
+* `.none` disables link tracking.
+* `.explicit` tracks only explicit OSC 8 hyperlinks.
+* `.implicit` (default) tracks explicit links first, then falls back to implicit URL detection from terminal text.
+
+`linkReporting` controls link discovery/tracking. Link activation is additionally gated by `linkHighlightMode`.
+
+When the user activates a link, `TerminalView` calls `TerminalViewDelegate.requestOpenLink(source:link:params:)`.
+For explicit OSC 8 hyperlinks, `params` includes parsed key/value metadata (if provided); implicit links use empty `params`.
+On macOS, the default delegate implementation opens links via `NSWorkspace`. On iOS/visionOS, handle `requestOpenLink` in your delegate.
+
+* On macOS, tracking is hover-based. The default highlight mode is `.hoverWithModifier`, so Command-hover and Command-click are the default link interaction.
+* On iOS/visionOS, tracking is driven by pointer/hover interactions (`UIPointerInteraction` / `UIHoverGestureRecognizer`), and tap activation depends on the active `linkHighlightMode` (including modifier requirements for modifier-based modes).
 
 ## Using SSH
 The core library currently does not provide a convenient way to connect to SSH, purely
@@ -195,6 +234,51 @@ test suite to run.
 
 If using Xcode, you can select the "SwiftTerm" project, and then use Command-U 
 to run the test suite.
+
+## Bidirectional text (BiDi)
+
+SwiftTerm implements the [terminal-wg BiDi
+recommendation](https://terminal-wg.pages.freedesktop.org/bidi/) for
+right-to-left and mixed-direction text on the Apple views (both the
+CoreGraphics and Metal renderers):
+
+* The buffer stays in logical order; each paragraph is reordered at render
+  time with the Unicode Bidirectional Algorithm, with Arabic contextual
+  shaping, lam-alef ligatures, and bracket mirroring.
+* All six presentation modes from the recommendation are supported:
+  implicit/explicit, fixed LTR/RTL, and autodetection from the first strong
+  character. The default (implicit + autodetect + LTR fallback) renders RTL
+  text correctly out of the box and leaves LTR output unchanged.
+* Terminal applications control the behavior with the standard sequences:
+  BDSM (`CSI 8 h/l`), SCP (`CSI Ps SP k`), and DEC private modes 2501
+  (autodetection), 2500 (box-drawing mirroring), and 1243 (arrow-key
+  swapping), including DECRQM queries and XTSAVE/XTRESTORE.
+* Embedders can set the initial state through `TerminalOptions`
+  (`initialBidiState`, `initialBidiArrowKeySwap`, `maximumBidiParagraphRows`),
+  inspect it via `Terminal.currentBidiState`, and opt a view out entirely
+  with `TerminalView.bidiHostPolicy = .legacyLeftToRight`.
+
+The details are in the [BiDi
+documentation](https://migueldeicaza.github.io/SwiftTerm/documentation/swiftterm/bidi).
+
+## BiDi visual test harness
+
+The [SwiftTerm BiDi harness](Tools/BidiHarness/README.md) is an AppKit app for
+visual BiDi tests. It shows SwiftTerm beside a WebKit reference. Its scenarios
+cover paragraph reflow, terminal modes, reset behavior, box mirroring,
+combining marks, selection, cursor movement, and scrollback.
+
+Run it from the repository root:
+
+```sh
+Tools/BidiHarness/Scripts/run-harness.sh --artifacts /tmp/bidi-artifacts
+```
+
+Use the controls in the app to select a scenario, move through its steps,
+resize the terminal, scroll, change the renderer, and save a capture. The app
+also has a local control socket for repeatable test runs. See the harness README
+for the control commands, Xcode instructions, artifact paths, and the macOS
+permission that Metal window capture needs.
 
 Screenshots
 ===========
