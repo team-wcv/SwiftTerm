@@ -850,21 +850,48 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     ///  - pos: the location where this was triggered in the buffer, it used at a later point
     ///  to auto-select a word
     func showContextMenu (forRegion: CGRect, pos: Position) {
-        var items: [UIMenuItem] = []
-        
         lastLongSelect = pos
         lastLongSelectRegion = forRegion
 
-        //GAR: Declutter context menu
-        //items.append (UIMenuItem(title: "Reset", action: #selector(resetCmd)))
-        
-        // Configure the shared menu controller
-        let menuController = UIMenuController.shared
-        menuController.menuItems = items
-        
-        // Set the location of the menu in the view.
-        //let menuLocation = CGRect (origin: at, size: CGSize (width: cellDimension.width, height: cellDimension.height))
-        menuController.showMenu(from: self, rect: forRegion)
+        // The menu lists the standard edit actions this view accepts in
+        // canPerformAction(_:withSender:): Copy, Paste, Select and Select All.
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            editMenuPresenter.present(avoiding: forRegion)
+        } else {
+            let menuController = UIMenuController.shared
+            menuController.menuItems = []
+            menuController.showMenu(from: self, rect: forRegion)
+        }
+    }
+
+    /// Backing store for `editMenuPresenter`. Stored properties cannot carry an availability
+    /// annotation, so this holds a `TerminalEditMenuPresenter` (iOS 16 and later) untyped.
+    private var editMenuPresenterStorage: AnyObject?
+
+    @available(iOS 16.0, visionOS 1.0, *)
+    var editMenuPresenter: TerminalEditMenuPresenter {
+        if let presenter = editMenuPresenterStorage as? TerminalEditMenuPresenter {
+            return presenter
+        }
+        let presenter = TerminalEditMenuPresenter(view: self)
+        editMenuPresenterStorage = presenter
+        return presenter
+    }
+
+    /// Whether the edit menu is on screen.
+    var isEditMenuVisible: Bool {
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            return (editMenuPresenterStorage as? TerminalEditMenuPresenter)?.isVisible ?? false
+        }
+        return UIMenuController.shared.isMenuVisible
+    }
+
+    func hideEditMenu () {
+        if #available(iOS 16.0, visionOS 1.0, *) {
+            (editMenuPresenterStorage as? TerminalEditMenuPresenter)?.dismiss()
+        } else {
+            UIMenuController.shared.hideMenu()
+        }
     }
     
     // This is a position relative to the buffer
@@ -1047,8 +1074,8 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
                     selection.selectNone()
                     disableSelectionPanGesture()
                 }
-                if UIMenuController.shared.isMenuVisible {
-                    UIMenuController.shared.hideMenu()
+                if isEditMenuVisible {
+                    hideEditMenu()
                 } else {
                     let location = gestureRecognizer.location(in: gestureRecognizer.view)
                     let tapLoc = calculateTapHit(gesture: gestureRecognizer).grid
@@ -3380,7 +3407,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 #endif
             
             if !self.selection.active {
-                UIMenuController.shared.hideMenu()
+                self.hideEditMenu()
                 self.selection.selectNone()
                 self.disableSelectionPanGesture()
             }
@@ -3715,5 +3742,53 @@ extension TerminalView: UIAccessibilityReadingContent {
     }
 }
 #endif
+
+/// Presents the system edit menu for a ``TerminalView`` with `UIEditMenuInteraction`, which
+/// replaces `UIMenuController` from iOS 16. The menu's actions come from the view's
+/// `canPerformAction(_:withSender:)`; this object only places the menu and tracks visibility.
+@available(iOS 16.0, visionOS 1.0, *)
+@MainActor
+// UIKit calls the delegate on the main thread; @preconcurrency checks that at runtime.
+final class TerminalEditMenuPresenter: NSObject, @preconcurrency UIEditMenuInteractionDelegate {
+    private var interaction: UIEditMenuInteraction?
+    /// The region the menu points at and avoids covering, in the view's coordinates.
+    private var targetRect: CGRect = .zero
+    private(set) var isVisible = false
+
+    init(view: UIView) {
+        super.init()
+        let interaction = UIEditMenuInteraction(delegate: self)
+        view.addInteraction(interaction)
+        self.interaction = interaction
+    }
+
+    func present(avoiding region: CGRect) {
+        targetRect = region
+        let configuration = UIEditMenuConfiguration(identifier: nil,
+                                                    sourcePoint: CGPoint(x: region.midX, y: region.minY))
+        interaction?.presentEditMenu(with: configuration)
+    }
+
+    func dismiss() {
+        interaction?.dismissMenu()
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+                             targetRectFor configuration: UIEditMenuConfiguration) -> CGRect {
+        targetRect
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+                             willPresentMenuFor configuration: UIEditMenuConfiguration,
+                             animator: UIEditMenuInteractionAnimating) {
+        isVisible = true
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+                             willDismissMenuFor configuration: UIEditMenuConfiguration,
+                             animator: UIEditMenuInteractionAnimating) {
+        isVisible = false
+    }
+}
 
 #endif
