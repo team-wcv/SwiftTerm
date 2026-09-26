@@ -392,6 +392,21 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         didFinishSetup = true
     }
 
+    open override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard previousTraitCollection?.horizontalSizeClass != traitCollection.horizontalSizeClass
+                || previousTraitCollection?.verticalSizeClass != traitCollection.verticalSizeClass,
+              let accessory = terminalAccessory else {
+            return
+        }
+        let height = accessoryBarHeight
+        guard accessory.frame.height != height else { return }
+        accessory.frame.size.height = height
+        if isFirstResponder {
+            reloadInputViews()
+        }
+    }
+
     open override func didMoveToWindow() {
         super.didMoveToWindow()
         updateTextBlinkLifecycle()
@@ -1492,10 +1507,25 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         }
     }
 
+    /// Whether `traits` describe an Expanded scene: regular width *and* regular height.
+    ///
+    /// That is an iPad or the inner display of an unfolded foldable, whatever the device idiom
+    /// says; an iPhone in landscape is regular width but compact height and stays compact. The
+    /// keyboard accessory sizes itself from this instead of the device idiom.
+    static func isExpanded(_ traits: UITraitCollection) -> Bool {
+        traits.horizontalSizeClass == .regular && traits.verticalSizeClass == .regular
+    }
+
+    /// Accessory bar height for the current size classes. Before the view is in a window its
+    /// size classes are unspecified, so this starts compact and traitCollectionDidChange(_:)
+    /// corrects it once the scene's traits arrive.
+    var accessoryBarHeight: CGFloat {
+        TerminalView.isExpanded(traitCollection) ? 48 : 36
+    }
+
     func setupAccessoryView ()
     {
-        let short = UIDevice.current.userInterfaceIdiom == .phone
-        let ta = TerminalAccessory(frame: CGRect(x: 0, y: 0, width: frame.width, height: short ? 36 : 48),
+        let ta = TerminalAccessory(frame: CGRect(x: 0, y: 0, width: frame.width, height: accessoryBarHeight),
                                    inputViewStyle: .keyboard, container: self)
         #if !os(visionOS)
         inputAssistantItem.leadingBarButtonGroups = []
@@ -1958,7 +1988,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         #if os(visionOS)
         1.0
         #else
-        UIScreen.main.scale
+        // The trait collection carries the scale of the display the view is actually on,
+        // which the main screen is not once a scene can live on another display. Before the
+        // view has traits, contentScaleFactor (UIKit seeds it with the display scale) stands in.
+        let scale = traitCollection.displayScale
+        return scale > 0 ? scale : max(contentScaleFactor, 1)
         #endif
     }
     
