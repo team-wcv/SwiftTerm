@@ -19,6 +19,20 @@ on:
   pull_request:
     branches: [develop]
   workflow_dispatch:
+    # Run some slices only, e.g. `ios` to check the iOS build without paying for
+    # the macOS steps. Push to develop always runs every slice.
+    inputs:
+      platforms:
+        description: Slices to run
+        type: choice
+        default: macos,ios,watchos
+        options:
+          - macos,ios,watchos
+          - ios
+          - macos
+          - watchos
+          - macos,ios
+          - ios,watchos
 
 permissions:
   contents: read
@@ -30,13 +44,15 @@ concurrency:
 # Inline per the G3b exception (sample Xcode projects), so it does not call
 # team-wcv/.github swift-kit-ci-platforms.yml. It uses the same toolchain rule:
 # exact Xcode 27.0 on the xcode-27 image, failing if that bundle is missing.
+# A dispatch's `platforms` choice gates the macOS and iOS steps.
 jobs:
   build:
     if: >-
       ${{
-        (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+        ((github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
         github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'pull_request' && vars.SWIFT_KIT_CI_ON_PULL_REQUEST == 'true')
+        (github.event_name == 'pull_request' && vars.SWIFT_KIT_CI_ON_PULL_REQUEST == 'true')) &&
+        (contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') || contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,'))
       }}
 
     runs-on: xcode-27
@@ -80,17 +96,21 @@ jobs:
       run: ls -lR
 
     - name: Xcode Mac Build
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       run: xcodebuild -project TerminalApp/MacTerminal.xcodeproj -scheme MacTerminal
 
     - name: Xcode iOS Build
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,') }}
       run: |
         xcodebuild -project TerminalApp/iOSTerminal.xcodeproj -scheme iOSTerminal -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
 
     - name: Swift Package Build
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       run: swift build -v
 
     # The package's own iOS Simulator slice, built against its iOS 13 floor.
     - name: Swift Package Build (iOS Simulator)
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,') }}
       run: |
         set -euo pipefail
         xcodebuild build \
@@ -102,11 +122,13 @@ jobs:
           -quiet
 
     - name: Run tests
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       env:
         SWIFT_TEST_DISABLE_PARALLELIZATION: "1"
       run: swift test -v
 
     - name: Coverage
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       env:
         SWIFT_TEST_DISABLE_PARALLELIZATION: "1"
       run: |
