@@ -42,6 +42,9 @@ Fork-specific changes are kept minimal to reduce merge friction. Current diverge
 | iOS dirty-row invalidation (reworks cd6fb70) | `Apple/AppleTerminalView.swift` | Upstream repaints the whole iOS view on every update when the Metal renderer is off. |
 | iOS pan-to-wheel in mouse mode (iOS half of 3542889) | `iOS/iOSTerminalView.swift` | Upstream's line-accurate wheel (#600) is macOS only; iOS still sends a button-1 drag. |
 | Shader source bundled with `.copy` | `Package.swift` | `.process` needs the separately installed Metal Toolchain (Xcode 26+) on every build; the renderer compiles the source at runtime. |
+| Floors iOS 15 / tvOS 15 / macOS 13 and dead availability checks removed | `Package.swift`, `iOS/*`, `Mac/MacTerminalView.swift`, `LocalProcess.swift` | Xcode 27 does not build iOS 13 or tvOS 13. To be offered upstream. |
+| Scene traits instead of the main screen and device idiom | `iOS/iOSTerminalView.swift`, `iOS/iOSAccessoryView.swift` | Correct metrics on foldables, iPad split view and external displays. To be offered upstream. |
+| `UIEditMenuInteraction` edit menu, image renderers instead of deprecated image contexts | `iOS/iOSTerminalView.swift`, `Mac/MacTerminalView.swift` | Deprecated APIs. To be offered upstream. |
 
 Fork patches dropped at the v1.20.0 sync because upstream now covers them: the Shift-Tab `SendData` fix
 (upstream #473), the macOS scroll-wheel reports (upstream #600 and DECSET 1007), the 16.67 ms throttle

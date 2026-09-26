@@ -18,6 +18,13 @@ This project does not yet follow strict semantic versioning but aims for source-
 - The Metal shader source is bundled with `.copy` instead of `.process`, so builds do not need the
   Metal Toolchain component.
 - iOS invalidates only the changed rows, at content coordinates (reworks cd6fb70).
+- Platform floors raised to iOS 15 / tvOS 15 / macOS 13 (visionOS 1 unchanged); availability checks
+  that are always true at those floors are removed.
+- The iOS view sizes itself from scene traits: the backing scale comes from the trait collection,
+  the alternate keyboard from the window bounds, and the accessory bar height and key widths from
+  the size classes (regular width and height gets the larger metrics) instead of the device idiom.
+- The iOS edit menu uses `UIEditMenuInteraction` on iOS 16 and later (`UIMenuController` on iOS 15).
+- Image scaling and stripes use `UIGraphicsImageRenderer` on iOS and no longer use `lockFocus` on macOS.
 
 ### Fixed
 
