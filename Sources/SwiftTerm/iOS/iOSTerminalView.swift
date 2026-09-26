@@ -1178,10 +1178,14 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
         let currentBounds = bounds
         let sizeChanged = currentBounds.size != lastLayoutBounds.size
+        let originChanged = currentBounds.origin != lastLayoutBounds.origin
 
         if sizeChanged {
             processSizeChange(newSize: currentBounds.size)
             updateCursorPosition()
+        }
+
+        if sizeChanged || originChanged {
             setNeedsDisplay(currentBounds)
         }
 
