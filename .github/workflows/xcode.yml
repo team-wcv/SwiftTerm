@@ -13,18 +13,77 @@ on:
       - 'branch.md'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/PULL_REQUEST_TEMPLATE.md'
+  # The macOS job runs on pull requests only while the repository variable
+  # SWIFT_KIT_CI_ON_PULL_REQUEST is 'true', which needs a recorded cost exception
+  # (team-wcv/repo-policy docs/ci-cost-policy.md rule 1). Otherwise it skips.
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+    # Run some slices only, e.g. `ios` to check the iOS build without paying for
+    # the macOS steps. Push to develop always runs every slice.
+    inputs:
+      platforms:
+        description: Slices to run
+        type: choice
+        default: macos,ios,watchos
+        options:
+          - macos,ios,watchos
+          - ios
+          - macos
+          - watchos
+          - macos,ios
+          - ios,watchos
 
-env:
-  DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+permissions:
+  contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# Inline per the G3b exception (sample Xcode projects), so it does not call
+# team-wcv/.github swift-kit-ci-platforms.yml. It uses the same toolchain rule:
+# exact Xcode 27.0 on the xcode-27 image, failing if that bundle is missing.
+# A dispatch's `platforms` choice gates the macOS and iOS steps.
 jobs:
   build:
+    if: >-
+      ${{
+        ((github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'pull_request' && vars.SWIFT_KIT_CI_ON_PULL_REQUEST == 'true')) &&
+        (contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') || contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,'))
+      }}
 
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 25
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Select Xcode
+      env:
+        XCODE_APP: /Applications/Xcode_27.0.app
+        XCODE_VERSION: '27.0'
+      run: |
+        set -euo pipefail
+        developer_dir="$XCODE_APP/Contents/Developer"
+        if [ ! -d "$developer_dir" ]; then
+          echo "::error::Xcode not found at $XCODE_APP on runner image '${ImageOS:-unknown}' ${ImageVersion:-}. Installed bundles:"
+          ls -d /Applications/Xcode*.app || true
+          exit 1
+        fi
+        reported="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | head -1)"
+        case "$reported" in
+          "Xcode $XCODE_VERSION" | "Xcode $XCODE_VERSION".*) ;;
+          *)
+            echo "::error::$XCODE_APP reports '$reported'; this workflow requires Xcode $XCODE_VERSION"
+            exit 1
+            ;;
+        esac
+        echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+        DEVELOPER_DIR="$developer_dir" xcodebuild -version
+        DEVELOPER_DIR="$developer_dir" swift --version
 
 #    - name: Checkout esctest for testing
 #      uses: actions/checkout@v4
@@ -37,21 +96,39 @@ jobs:
       run: ls -lR
 
     - name: Xcode Mac Build
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       run: xcodebuild -project TerminalApp/MacTerminal.xcodeproj -scheme MacTerminal
 
     - name: Xcode iOS Build
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,') }}
       run: |
         xcodebuild -project TerminalApp/iOSTerminal.xcodeproj -scheme iOSTerminal -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
 
     - name: Swift Package Build
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       run: swift build -v
 
+    # The package's own iOS Simulator slice, built against its iOS 13 floor.
+    - name: Swift Package Build (iOS Simulator)
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,') }}
+      run: |
+        set -euo pipefail
+        xcodebuild build \
+          -scheme SwiftTerm \
+          -destination 'generic/platform=iOS Simulator' \
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+          -skipPackagePluginValidation \
+          -skipMacroValidation \
+          -quiet
+
     - name: Run tests
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       env:
         SWIFT_TEST_DISABLE_PARALLELIZATION: "1"
       run: swift test -v
 
     - name: Coverage
+      if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       env:
         SWIFT_TEST_DISABLE_PARALLELIZATION: "1"
       run: |
