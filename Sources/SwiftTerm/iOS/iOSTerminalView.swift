@@ -717,34 +717,26 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         imgView.tintColor = .white
     }
     
-    var panScrollAccumulator: CGFloat = 0
-
     @objc func panMouseHandler (_ gestureRecognizer: UIPanGestureRecognizer){
         guard gestureRecognizer.view != nil else { return }
         if allowMouseReporting && terminal.mouseMode != .off {
             switch gestureRecognizer.state {
             case .began:
-                panScrollAccumulator = 0
-            case .changed:
-                let translation = gestureRecognizer.translation(in: self)
-                panScrollAccumulator += translation.y
-                gestureRecognizer.setTranslation(.zero, in: self)
-                let rowHeight = cellDimension.height
-                while abs(panScrollAccumulator) >= rowHeight {
-                    let button = panScrollAccumulator < 0 ? 4 : 5
-                    let flags = terminal.encodeButton(
-                        button: button, release: false,
-                        shift: false, meta: false,
-                        control: terminalAccessory?.controlModifier ?? controlModifier ?? false)
-                    let hit = calculateTapHit(gesture: gestureRecognizer)
-                    if let grid = hit.grid.toScreenCoordinate(from: terminal.displayBuffer) {
-                        terminal.sendEvent(buttonFlags: flags, x: grid.col, y: grid.row,
-                                           pixelX: hit.pixels.col, pixelY: hit.pixels.row)
-                    }
-                    panScrollAccumulator += panScrollAccumulator < 0 ? rowHeight : -rowHeight
+                // send the initial tap
+                if terminal.mouseMode.sendButtonPress() {
+                    sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: false)
                 }
             case .ended, .cancelled:
-                panScrollAccumulator = 0
+                if terminal.mouseMode.sendButtonRelease() {
+                    sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: true)
+                }
+            case .changed:
+                if terminal.mouseMode.sendButtonTracking() {
+                    let hit = calculateTapHit(gesture: gestureRecognizer)
+                    if let grid = hit.grid.toScreenCoordinate(from: terminal.displayBuffer) {
+                        terminal.sendMotion(buttonFlags: encodeFlags(release: false), x: grid.col, y: grid.row, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
+                    }
+                }
             default:
                 break
             }
