@@ -1786,8 +1786,6 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     }
     
     func scale (image: UIImage, size: CGSize) -> UIImage {
-        UIGraphicsBeginImageContext(size)
-        
         let srcRatio = image.size.height/image.size.width
         let scaledRatio = size.width/size.height
         
@@ -1800,11 +1798,14 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             let nh = (size.width * image.size.height) / image.size.width
             dstRect = CGRect (x: 0, y: (size.height-nh)/2, width: size.width, height: nh)
         }
-        image.draw (in: dstRect)
-        
-        let ret = UIGraphicsGetImageFromCurrentImageContext() ?? image
-        UIGraphicsEndImageContext()
-        return ret
+        // One pixel per point, transparent, 8-bit: what UIGraphicsBeginImageContext produced.
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = 1
+        format.opaque = false
+        format.preferredRange = .standard
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw (in: dstRect)
+        }
     }
     
     func drawImageInStripe (image: TTImage, srcY: CGFloat, width: CGFloat, srcHeight: CGFloat, dstHeight: CGFloat, size: CGSize) -> TTImage? {
@@ -1816,18 +1817,18 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         
         let destRect = CGRect(x: 0, y: 0, width: width, height: dstHeight)
         
-        UIGraphicsBeginImageContextWithOptions(size, false, 0.0)
-        guard let ctx = UIGraphicsGetCurrentContext() else {
-            return nil
+        // Rendered at the scale of the display the view is on (the old context used scale 0,
+        // meaning the main screen's).
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = backingScaleFactor()
+        format.opaque = false
+        format.preferredRange = .standard
+        return UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+            let ctx = rendererContext.cgContext
+            ctx.translateBy(x: 0, y: dstHeight)
+            ctx.scaleBy(x: 1, y: -1)
+            uicrop.draw(in: destRect)
         }
-        ctx.translateBy(x: 0, y: dstHeight)
-        ctx.scaleBy(x: 1, y: -1)
-
-        uicrop.draw(in: destRect)
-        
-        let stripe = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return stripe
     }
 
     open func scrolled(source terminal: Terminal, yDisp: Int) {

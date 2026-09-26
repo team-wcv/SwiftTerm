@@ -3276,11 +3276,8 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
     }
     
     func scale (image: NSImage, size: CGSize) -> NSImage {
-        
-        let scaledImg = TTImage (size: CGSize (width: size.width, height: size.height))
         let srcRatio = image.size.height/image.size.width
         let scaledRatio = size.width/size.height
-        scaledImg.lockFocus()
         let srcRect = CGRect(origin: CGPoint.zero, size: image.size)
         let dstRect: CGRect
         
@@ -3291,10 +3288,12 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
             let nh = (size.width * image.size.height) / image.size.width
             dstRect = CGRect (x: 0, y: (size.height-nh)/2, width: size.width, height: nh)
         }
-        image.draw(in: dstRect, from: srcRect, operation: .copy, fraction: 1)
-        
-        scaledImg.unlockFocus()
-        return scaledImg
+        // A drawing-handler image renders at the destination's backing scale when drawn,
+        // replacing lockFocus (deprecated in macOS 14).
+        return NSImage (size: size, flipped: false) { _ in
+            image.draw(in: dstRect, from: srcRect, operation: .copy, fraction: 1)
+            return true
+        }
     }
     
     func drawImageInStripe (image: TTImage, srcY: CGFloat, width: CGFloat, srcHeight: CGFloat, dstHeight: CGFloat, size: CGSize) -> TTImage? {
@@ -3306,14 +3305,20 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
                 colorSpaceName: NSColorSpaceName.calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0) else {
             return nil
         }
-        let stripe = NSImage (size: size)
-        stripe.addRepresentation (bitmapImage)
-
-        stripe.lockFocus()
+        guard let bitmapContext = NSGraphicsContext (bitmapImageRep: bitmapImage) else {
+            return nil
+        }
+        // Draw straight into the bitmap rep instead of lockFocus (deprecated in macOS 14).
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = bitmapContext
         let srcRect = CGRect(x: 0, y: CGFloat(srcY), width: image.size.width, height: srcHeight)
         let destRect = CGRect(x: 0, y: 0, width: width, height: dstHeight)
         image.draw(in: destRect, from: srcRect, operation: .copy, fraction: 1.0)
-        stripe.unlockFocus()
+        bitmapContext.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+
+        let stripe = NSImage (size: size)
+        stripe.addRepresentation (bitmapImage)
         return stripe
     }
     
