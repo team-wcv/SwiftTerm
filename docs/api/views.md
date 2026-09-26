@@ -72,7 +72,7 @@ public required init?(coder: NSCoder)
 
 **File**: `Sources/SwiftTerm/iOS/iOSTerminalView.swift`
 **Declaration**: `open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollViewDelegate, TerminalDelegate`
-**Platform**: iOS 13+, visionOS 1+
+**Platform**: iOS 15+, visionOS 1+
 
 A UIKit `UIScrollView` subclass that renders the terminal. Supports software keyboard, external keyboard input, and the `TerminalAccessory` input bar.
 

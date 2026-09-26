@@ -1,12 +1,38 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 
 import PackageDescription
+import Foundation
 
+// A package manifest is compiled and run on the HOST, so `os(Linux)` is false
+// when cross-compiling from macOS to Linux — and the Apple/Mac/iOS sources are
+// then handed to the Linux target, which fails on `import CoreText`. There is
+// no way for a manifest to see the destination, so allow the exclude to be
+// forced explicitly.
+let excludeAppleSources =
+    ProcessInfo.processInfo.environment["SWIFTTERM_EXCLUDE_APPLE"] == "1"
 #if os(Linux) || os(Windows)
 let platformExcludes = ["Apple", "Mac", "iOS"]
 #else
-let platformExcludes: [String] = []
+let platformExcludes: [String] = excludeAppleSources ? ["Apple", "Mac", "iOS"] : []
 #endif
+
+let isGitHubActions = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+let disableBenchmark = true
+let benchmarkDependencies: [Package.Dependency] = (isGitHubActions || disableBenchmark) ? [] : [
+    .package(url: "https://github.com/ordo-one/package-benchmark", .upToNextMajor(from: "1.29.11"))
+]
+
+let buildInfoTargets: [Target] = [
+    .executableTarget(
+        name: "SwiftTermBuildInfoGenerator",
+        path: "Sources/SwiftTermBuildInfoGenerator"
+    ),
+    .plugin(
+        name: "SwiftTermBuildInfoPlugin",
+        capability: .buildTool(),
+        dependencies: ["SwiftTermBuildInfoGenerator"]
+    )
+]
 
 #if os(Windows)
 let products: [Product] = [
@@ -22,7 +48,10 @@ let targets: [Target] = [
         name: "SwiftTerm",
         dependencies: [],
         path: "Sources/SwiftTerm",
-        exclude: platformExcludes + ["Mac/README.md"]
+        exclude: platformExcludes + ["Mac/README.md"],
+        plugins: [
+            .plugin(name: "SwiftTermBuildInfoPlugin")
+        ]
 //        swiftSettings: [
 //            .unsafeFlags(["-enforce-exclusivity=none"])
 //        ]
@@ -35,9 +64,13 @@ let targets: [Target] = [
     .testTarget(
         name: "SwiftTermTests",
         dependencies: ["SwiftTerm"],
-        path: "Tests/SwiftTermTests"
+        path: "Tests/SwiftTermTests",
+        resources: [
+            .copy("Fixtures/xterm-ghostty.infocmp"),
+            .copy("Fixtures/swifterm-terminfo.infocmp")
+        ]
     )
-]
+] + buildInfoTargets
 #else
 let products: [Product] = [
     .executable(name: "SwiftTermFuzz", targets: ["SwiftTermFuzz"]),
@@ -46,6 +79,20 @@ let products: [Product] = [
         name: "SwiftTerm",
         targets: ["SwiftTerm"]
     ),
+]
+
+let benchmarkTargets: [Target] = (isGitHubActions || disableBenchmark) ? [] : [
+    .executableTarget(
+        name: "SwiftTermBenchmarks",
+        dependencies: [
+            "SwiftTerm",
+            .product(name: "Benchmark", package: "package-benchmark")
+        ],
+        path: "Benchmarks/SwiftTermBenchmarks",
+        plugins: [
+            .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+        ]
+    )
 ]
 
 let targets: [Target] = [
@@ -58,7 +105,16 @@ let targets: [Target] = [
 //            .product(name: "Subprocess", package: "swift-subprocess", condition: .when(platforms: [.macOS, .linux]))
 //        ],
         path: "Sources/SwiftTerm",
-        exclude: platformExcludes + ["Mac/README.md"]
+        exclude: platformExcludes + ["Mac/README.md"],
+        resources: [
+            // Copied, not compiled: the renderer compiles this source at runtime when no
+            // metallib is bundled, so building SwiftTerm does not need the separately
+            // installed Metal Toolchain component (Xcode 26+).
+            .copy("Apple/Metal/Shaders.metal")
+        ],
+        plugins: [
+            .plugin(name: "SwiftTermBuildInfoPlugin")
+        ]
 //        swiftSettings: [
 //            .unsafeFlags(["-enforce-exclusivity=none"])
 //        ]
@@ -79,25 +135,31 @@ let targets: [Target] = [
     .testTarget(
         name: "SwiftTermTests",
         dependencies: ["SwiftTerm"],
-        path: "Tests/SwiftTermTests"
-    ),
-]
+        path: "Tests/SwiftTermTests",
+        resources: [
+            .copy("Fixtures/xterm-ghostty.infocmp"),
+            .copy("Fixtures/swifterm-terminfo.infocmp")
+        ]
+    )
+] + benchmarkTargets + buildInfoTargets
 #endif
 
 let package = Package(
     name: "SwiftTerm",
     platforms: [
-        .iOS(.v13),
+        // iOS 15 / tvOS 15 are the lowest targets Xcode 27 builds; macOS 13 matches the
+        // package-benchmark requirement, so the manifest no longer needs two floors.
+        .iOS(.v15),
         .macOS(.v13),
-        .tvOS(.v13),
+        .tvOS(.v15),
         .visionOS(.v1)
     ],
     products: products,
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.4.3"),
+    ] + benchmarkDependencies,
 //        .package(url: "https://github.com/swiftlang/swift-subprocess", revision: "426790f3f24afa60b418450da0afaa20a8b3bdd4")
-    ],
     targets: targets,
-    swiftLanguageVersions: [.v5]
+    swiftLanguageModes: [.v5]
 )

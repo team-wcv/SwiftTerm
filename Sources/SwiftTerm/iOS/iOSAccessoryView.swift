@@ -157,9 +157,12 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
                                                                       height: 400)),
                                          terminalView: terminalView)
             #else
+            // Size from the window the terminal is in, not the main screen: in iPad split view,
+            // Stage Manager or one half of a foldable the scene is smaller than the display.
+            let host = tv.window?.bounds.size ?? tv.bounds.size
             tv.inputView = KeyboardView (frame: CGRect (origin: CGPoint.zero,
-                                                        size: CGSize (width: UIScreen.main.bounds.width,
-                                                                      height: max((UIScreen.main.bounds.height / 5),140))),
+                                                        size: CGSize (width: host.width,
+                                                                      height: max((host.height / 5),140))),
                                          terminalView: terminalView)
             #endif
         } else {
@@ -214,13 +217,18 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         rightViews.append(makeAutoRepeatButton ("arrow.up", #selector(up)))
         rightViews.append(makeAutoRepeatButton ("arrow.right", #selector(right)))
         touchButton = makeButton ("", #selector(toggleTouch), icon: "hand.draw", isNormal: false)
-        touchButton.isSelected = terminalView?.allowMouseReporting ?? false
+        touchButton.isSelected = !(terminalView?.allowMouseReporting ?? false)
         rightViews.append (touchButton)
         keyboardButton = makeButton ("", #selector(toggleInputKeyboard), icon: "keyboard.chevron.compact.down", isNormal: false)
         rightViews.append (keyboardButton)
 
+        // Size classes of the scene the terminal is in (the accessory's own traits come from the
+        // keyboard host), so an unfolded foldable gets the iPad metrics and an iPad split-view
+        // pane the phone ones.
+        let traits = terminalView?.traitCollection ?? traitCollection
+
         // calculate aditional space we can give to keys we want to be bigger (all top level except function keys)
-        let minWidth: CGFloat = useSmall ? 20.0 : (UIDevice.current.userInterfaceIdiom == .phone) ? 22 : 32
+        let minWidth: CGFloat = useSmall ? 20.0 : TerminalView.isExpanded(traits) ? 32 : 22
         let maxFuncKeyWidth = (minWidth + buttonPad) * 10
         let importantKeysCount: Double = useSmall ? 11 : 13
         let maxSpaceForImportantKeys = frame.width - maxFuncKeyWidth - buttonPad
@@ -268,7 +276,9 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         let usedSpace = (floatViews).reduce(fixedUsedSpace) { $0 + $1.frame.width + buttonPad }
         var additionalUsedSpaceToAdd = 0.0
         
-        if UIDevice.current.userInterfaceIdiom == .phone && frame.width > 500 {
+        // A wide bar in a compact-height scene is a phone in landscape; leave room for the
+        // rounded display corners there.
+        if traits.verticalSizeClass == .compact && frame.width > 500 {
             additionalUsedSpaceToAdd = 50.0
         }
         var left = frame.width - usedSpace - additionalUsedSpaceToAdd

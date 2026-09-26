@@ -2,8 +2,6 @@
 import SwiftUI
 
 // Internal, for testing - look at SwiftTermApp for a proper binding
-@available(iOS 13.0, *)
-@available(visionOS 1.0, *)
 struct SwiftUITerminalView: View {
     /// Optional closure that is invoked once right after the underlying ``TerminalView`` is created.
     /// Use this to seed data via `feed` or to tweak the instance before it appears.
@@ -18,8 +16,6 @@ struct SwiftUITerminalView: View {
     }
 }
 
-@available(iOS 13.0, *)
-@available(visionOS 1.0, *)
 private struct TerminalViewContainer: UIViewRepresentable {
     typealias UIViewType = SwiftUITerminalHostView
 
@@ -63,13 +59,12 @@ private struct TerminalViewContainer: UIViewRepresentable {
         public func requestOpenLink(source: TerminalView, link: String, params: [String : String]) {}
         public func bell(source: TerminalView) {}
         public func clipboardCopy(source: TerminalView, content: Data) {}
+        public func clipboardRead(source: TerminalView) -> Data? { return nil }
         public func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
         public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
     }
 }
 
-@available(iOS 13.0, *)
-@available(visionOS 1.0, *)
 private final class SwiftUITerminalHostView: TerminalView {
     private var lastAppliedSize: CGSize = .zero
 
@@ -91,8 +86,6 @@ private final class SwiftUITerminalHostView: TerminalView {
     }
 }
 
-@available(iOS 13.0, *)
-@available(visionOS 1.0, *)
 struct PreviewTerminal: View {
     var body: some View {
         SwiftUITerminalView(startupFeed: { terminal in
@@ -102,8 +95,6 @@ struct PreviewTerminal: View {
     }
 }
 
-@available(iOS 13.0, *)
-@available(visionOS 1.0, *)
 struct PreviewTerminal_Previews: PreviewProvider {
     static var previews: some View {
         PreviewTerminal()
