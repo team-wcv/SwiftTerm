@@ -2429,8 +2429,6 @@ extension TerminalView {
         setNeedsDisplay(region)
 #endif
         #else
-        // TODO iOS: need to update the code above, but will do that when I get some real
-        // life data being fed into it.
         #if canImport(MetalKit)
         if metalView != nil {
             metalDirtyRange = metalVisibleRange()
@@ -2438,10 +2436,10 @@ extension TerminalView {
             lastRenderedCursor = (x: buffer.x, y: buffer.yBase + buffer.y, hidden: terminal.cursorHidden)
             requestMetalDisplay()
         } else {
-            setNeedsDisplay(bounds)
+            setNeedsDisplay(contentDirtyRegion(rowStart: rowStart, rowEnd: rowEnd))
         }
         #else
-        setNeedsDisplay(bounds)
+        setNeedsDisplay(contentDirtyRegion(rowStart: rowStart, rowEnd: rowEnd))
         #endif
         #endif
 
@@ -2459,6 +2457,40 @@ extension TerminalView {
         }
     }
     
+    #if os(iOS) || os(visionOS)
+    // team-wcv fork patch (reworks cd6fb70): invalidate only the changed rows instead of the
+    // whole view. The UIKit view draws buffer row `n` at content y `n * cellHeight`, and
+    // `rowStart`/`rowEnd` are relative to `yBase`, so the rect is placed at `yBase + row`.
+    // Rows scrolled out of view fall outside `bounds` and cost nothing; a bounds-origin change
+    // (new output scrolling the view) still repaints everything from layoutSubviews().
+    func contentDirtyRegion(rowStart: Int, rowEnd: Int) -> CGRect {
+        let displayBuffer = terminal.displayBuffer
+        let cellHeight = cellDimension.height
+        guard cellHeight > 0, !displayBuffer.lines.isEmpty,
+              rowStart >= 0, rowEnd >= rowStart, rowEnd < terminal.rows else {
+            return bounds
+        }
+        let maxRow = displayBuffer.lines.count - 1
+        let absoluteStart = max(0, min(displayBuffer.yBase + rowStart, maxRow))
+        let absoluteEnd = max(absoluteStart, min(displayBuffer.yBase + rowEnd, maxRow))
+        // A change inside a bidi paragraph can move glyphs on its other rows too.
+        let dependencies = TerminalBidi.renderingDependencyRange(
+            rows: absoluteStart...absoluteEnd,
+            buffer: displayBuffer,
+            maximumRows: terminal.options.maximumBidiParagraphRows)
+        let top = CGFloat(dependencies.lowerBound) * cellHeight
+        var bottom = CGFloat(dependencies.upperBound + 1) * cellHeight
+        if dependencies.upperBound >= displayBuffer.yBase + terminal.rows - 1 {
+            // The last row also owns the sub-cell strip below the grid.
+            bottom = max(bottom, bounds.maxY)
+        } else {
+            // One more cell so descenders and tall glyphs below the band are cleared.
+            bottom += cellHeight
+        }
+        return CGRect(x: bounds.minX, y: top, width: bounds.width, height: bottom - top)
+    }
+    #endif
+
     func updateCursorPosition()
     {
         guard let caretView else { return }
