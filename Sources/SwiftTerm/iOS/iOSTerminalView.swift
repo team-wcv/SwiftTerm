@@ -22,7 +22,6 @@ import SwiftUI
 import MetalKit
 #endif
 
-@available(iOS 14.0, *)
 internal var log: Logger = Logger(subsystem: "org.tirania.SwiftTerm", category: "msg")
 
 public extension Notification.Name {
@@ -689,18 +688,13 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         let bar = TerminalProgressBarView(frame: .zero)
         bar.isHidden = true
         addSubview(bar)
-        if #available(iOS 11.0, visionOS 1.0, *) {
-            bar.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                bar.topAnchor.constraint(equalTo: frameLayoutGuide.topAnchor),
-                bar.leadingAnchor.constraint(equalTo: frameLayoutGuide.leadingAnchor),
-                bar.trailingAnchor.constraint(equalTo: frameLayoutGuide.trailingAnchor),
-                bar.heightAnchor.constraint(equalToConstant: 2)
-            ])
-        } else {
-            bar.autoresizingMask = [.flexibleWidth, .flexibleBottomMargin]
-            bar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 2)
-        }
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: frameLayoutGuide.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: frameLayoutGuide.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: frameLayoutGuide.trailingAnchor),
+            bar.heightAnchor.constraint(equalToConstant: 2)
+        ])
         progressBarView = bar
     }
 
@@ -1374,19 +1368,14 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     func setupLinkReportingInteractions ()
     {
-        if #available(iOS 13.4, visionOS 1.0, *) {
-            let interaction = UIPointerInteraction(delegate: self)
-            addInteraction(interaction)
-            pointerInteraction = interaction
-        }
-        if #available(iOS 13.0, visionOS 1.0, *) {
-            let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
-            addGestureRecognizer(hover)
-            hoverGesture = hover
-        }
+        let interaction = UIPointerInteraction(delegate: self)
+        addInteraction(interaction)
+        pointerInteraction = interaction
+        let hover = UIHoverGestureRecognizer(target: self, action: #selector(handleHover(_:)))
+        addGestureRecognizer(hover)
+        hoverGesture = hover
     }
 
-    @available(iOS 13.4, visionOS 1.0, *)
     public func pointerInteraction(_ interaction: UIPointerInteraction, regionFor request: UIPointerRegionRequest, defaultRegion: UIPointerRegion) -> UIPointerRegion?
     {
         lastPointerLocation = request.location

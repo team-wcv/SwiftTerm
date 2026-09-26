@@ -154,11 +154,7 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         let boldItalic: NSFont
         
         static var defaultFont: NSFont {
-            if #available(macOS 10.15, *)  {
-                return NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-            } else {
-                return NSFont(name: "Menlo Regular", size: NSFont.systemFontSize) ?? NSFont(name: "Courier", size: NSFont.systemFontSize)!
-            }
+            return NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         }
         
         public init(font baseFont: NSFont, fontSize: CGFloat? = nil) {
@@ -3052,12 +3048,7 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
                 up.stringValue = url
                 up.sizeToFit()
             } else {
-                let nup: NSTextField
-                if #available(macOS 10.12, *) {
-                    nup = NSTextField (string: url)
-                } else {
-                    nup = NSTextField ()
-                }
+                let nup = NSTextField (string: url)
                 nup.isBezeled = false
                 nup.font = tryUrlFont ()
                 nup.backgroundColor = nativeForegroundColor
