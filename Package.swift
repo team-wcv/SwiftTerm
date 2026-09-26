@@ -107,7 +107,10 @@ let targets: [Target] = [
         path: "Sources/SwiftTerm",
         exclude: platformExcludes + ["Mac/README.md"],
         resources: [
-            .process("Apple/Metal/Shaders.metal")
+            // Copied, not compiled: the renderer compiles this source at runtime when no
+            // metallib is bundled, so building SwiftTerm does not need the separately
+            // installed Metal Toolchain component (Xcode 26+).
+            .copy("Apple/Metal/Shaders.metal")
         ],
         plugins: [
             .plugin(name: "SwiftTermBuildInfoPlugin")
