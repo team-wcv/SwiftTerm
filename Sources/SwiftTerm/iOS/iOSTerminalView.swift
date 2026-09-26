@@ -1191,26 +1191,40 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         imgView.tintColor = .white
     }
     
+    /// Vertical pan distance not yet reported as a wheel step, in points.
+    var panScrollAccumulator: CGFloat = 0
+
+    // team-wcv fork patch (from 3542889): with mouse reporting on, a one-finger pan is a
+    // scroll wheel, not a button-1 drag, so `tmux set -g mouse on` and other mouse-aware
+    // apps scroll under a finger the way they do under a macOS trackpad. Upstream's
+    // line-accurate wheel (#600) covers macOS only.
     @objc func panMouseHandler (_ gestureRecognizer: UIPanGestureRecognizer){
         guard gestureRecognizer.view != nil else { return }
         if allowMouseReporting && !shiftBypassesMouseReporting(for: gestureRecognizer) && terminal.mouseMode != .off {
             switch gestureRecognizer.state {
             case .began:
-                // send the initial tap
-                if terminal.mouseMode.sendButtonPress() {
-                    sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: false)
-                }
-            case .ended, .cancelled:
-                if terminal.mouseMode.sendButtonRelease() {
-                    sharedMouseEvent(gestureRecognizer: gestureRecognizer, release: true)
-                }
+                panScrollAccumulator = 0
             case .changed:
-                if terminal.mouseMode.sendButtonTracking() {
+                let translation = gestureRecognizer.translation(in: self)
+                panScrollAccumulator += translation.y
+                gestureRecognizer.setTranslation(.zero, in: self)
+                let rowHeight = cellDimension.height
+                guard rowHeight > 0 else { return }
+                while abs(panScrollAccumulator) >= rowHeight {
+                    let button = panScrollAccumulator < 0 ? 4 : 5
+                    let flags = terminal.encodeButton(
+                        button: button, release: false,
+                        shift: false, meta: false,
+                        control: terminalAccessory?.controlModifier ?? controlModifier ?? false)
                     let hit = calculateTapHit(gesture: gestureRecognizer)
                     if let grid = hit.grid.toScreenCoordinate(from: terminal.displayBuffer) {
-                        terminal.sendMotion(buttonFlags: encodeFlags(release: false), x: grid.col, y: grid.row, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
+                        terminal.sendEvent(buttonFlags: flags, x: grid.col, y: grid.row,
+                                           pixelX: hit.pixels.col, pixelY: hit.pixels.row)
                     }
+                    panScrollAccumulator += panScrollAccumulator < 0 ? rowHeight : -rowHeight
                 }
+            case .ended, .cancelled:
+                panScrollAccumulator = 0
             default:
                 break
             }
