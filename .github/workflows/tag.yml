@@ -1,12 +1,17 @@
 # Cut a patch tag only after the exact develop revision passes CI.
 #
-# Kits consume each other by version — `from: "0.0.x"` — and SwiftPM resolves
+# Kits consume each other by version — `from: "1.11.x"` — and SwiftPM resolves
 # that to the newest matching TAG, not to develop. So work merged here stays
 # invisible to downstream consumers until a tag exists for it.
 #
-# See team-wcv/.github/.github/workflows/swift-kit-tag-after-ci.yml for the validated release gate.
-# It never moves a tag or bumps minor/major, and
-# skips when there is nothing new to release.
+# This repository is a public fork, and GitHub does not let a public repository
+# call a reusable workflow that lives in a private repository (the run fails at
+# startup with zero jobs). The org's shared tag-after-CI gate is private, so this
+# file carries the same logic inline. Keep the two in step when either changes.
+#
+# The gate never moves a tag or bumps minor/major, keeps the prefix of the
+# newest MAJOR.MINOR.PATCH tag (`v` here), and skips when the validated
+# revision already has a tag or a newer revision was already released.
 
 name: tag
 
@@ -16,13 +21,92 @@ on:
     types: [completed]
     branches: [develop]
 
-# Required. This repository's default workflow token is read-only, and a called
-# workflow cannot request more permission than its caller holds — without this
-# the run fails at startup, before any job exists, with no log to read.
+# Required. This repository's default workflow token is read-only; tagging
+# needs contents: write, and reading the triggering run needs actions: read.
 permissions:
   actions: read
   contents: write
 
 jobs:
   tag:
-    uses: team-wcv/.github/.github/workflows/swift-kit-tag-after-ci.yml@70203744d25bfecc8ca68fdb1c7961c17e5ef4a0
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: validated-kit-tags
+      cancel-in-progress: false
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      # No checkout: privileged tagging must never execute code from a producer artifact.
+      - uses: actions/github-script@v7
+        id: tag
+        with:
+          script: |
+            const repo = context.repo;
+            const fullName = `${repo.owner}/${repo.repo}`;
+            const event = context.payload.workflow_run;
+            const valid = run => run && run.event === 'push' && run.head_branch === 'develop'
+              && run.status === 'completed' && run.conclusion === 'success'
+              && run.path === '.github/workflows/build.yml'
+              && run.repository?.full_name === fullName
+              && run.head_repository?.full_name === fullName
+              && /^[0-9a-f]{40}$/.test(run.head_sha);
+            if (context.eventName !== 'workflow_run' || !valid(event)) {
+              throw new Error('Tagging requires a successful build.yml push run from this repository develop branch');
+            }
+            const { data: current } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: event.id });
+            if (!valid(current) || current.head_sha !== event.head_sha || current.run_attempt !== event.run_attempt) {
+              throw new Error('The completed CI event no longer matches a successful current run attempt');
+            }
+            const sha = current.head_sha;
+            const { data: branch } = await github.rest.repos.getBranch({ ...repo, branch: 'develop' });
+            const { data: reachable } = await github.rest.repos.compareCommits({ ...repo, base: sha, head: branch.commit.sha });
+            if (!['ahead', 'identical'].includes(reachable.status)) {
+              throw new Error('Validated revision is no longer reachable from develop');
+            }
+            const tags = await github.paginate(github.rest.repos.listTags, { ...repo, per_page: 100 });
+            const existing = tags.find(tag => tag.commit.sha === sha);
+            if (existing) {
+              core.setOutput('tag', existing.name);
+              core.info(`Validated revision already has tag ${existing.name}`);
+              return;
+            }
+            const versions = tags.map(tag => {
+              const match = /^(v?)(\d+)\.(\d+)\.(\d+)$/.exec(tag.name);
+              return match ? { tag, prefix: match[1], numbers: match.slice(2).map(BigInt) } : null;
+            }).filter(Boolean).sort((a, b) => {
+              for (let i = 0; i < 3; i++) {
+                if (a.numbers[i] !== b.numbers[i]) return a.numbers[i] > b.numbers[i] ? -1 : 1;
+              }
+              return a.tag.name.localeCompare(b.tag.name);
+            });
+            let next = '0.0.1';
+            if (versions.length) {
+              const latest = versions[0];
+              const { data: order } = await github.rest.repos.compareCommits({ ...repo, base: latest.tag.commit.sha, head: sha });
+              if (['behind', 'identical'].includes(order.status)) {
+                core.info('A newer or identical revision was already released; skipping stale completion');
+                return;
+              }
+              if (order.status !== 'ahead') throw new Error('Validated revision diverges from the latest release');
+              next = `${latest.prefix}${latest.numbers[0]}.${latest.numbers[1]}.${latest.numbers[2] + 1n}`;
+            } else if (tags.length) {
+              throw new Error('Existing tags have no stable MAJOR.MINOR.PATCH version; refusing to guess');
+            }
+            const { data: tagObject } = await github.rest.git.createTag({ ...repo, tag: next,
+              message: `${next}\n\nValidated develop revision ${sha}\nCI: ${current.html_url}`,
+              object: sha, type: 'commit' });
+            try {
+              await github.rest.git.createRef({ ...repo, ref: `refs/tags/${next}`, sha: tagObject.sha });
+            } catch (error) {
+              if (error.status !== 422) throw error;
+              const { data: raced } = await github.rest.repos.getCommit({ ...repo, ref: next });
+              if (raced.sha !== sha) throw new Error(`Concurrent tag ${next} belongs to a different revision; retry after reconciling releases`);
+            }
+            core.setOutput('tag', next);
+            core.info(`Tagged validated revision ${sha} as ${next}`);
