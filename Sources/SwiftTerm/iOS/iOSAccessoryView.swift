@@ -284,11 +284,17 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
             additionalUsedSpaceToAdd = 50.0
         }
         var left = contentWidth - usedSpace - additionalUsedSpaceToAdd
+        // Budget each optional key at its laid-out width, not at `minWidth`: a titled key
+        // sizes to fit its title, which is wider than the phone `minWidth`, and budgeting
+        // the smaller figure let the last function keys slide under the arrow keys once the
+        // safe-area insets narrowed the bar.
         func addOptional (_ text: String, _ selector: Selector) {
-            left -= minWidth + buttonPad
-            
+            let button = makeButton(text, selector)
+            setMinWidth(button)
+            left -= button.frame.width + buttonPad
+
             if left > 0 {
-                floatViews.append(makeButton(text, selector))
+                floatViews.append(button)
             }
         }
         addOptional("F1", #selector(f1))
