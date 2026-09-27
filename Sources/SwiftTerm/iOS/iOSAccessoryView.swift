@@ -231,7 +231,8 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         let minWidth: CGFloat = useSmall ? 20.0 : TerminalView.isExpanded(traits) ? 32 : 22
         let maxFuncKeyWidth = (minWidth + buttonPad) * 10
         let importantKeysCount: Double = useSmall ? 11 : 13
-        let maxSpaceForImportantKeys = frame.width - maxFuncKeyWidth - buttonPad
+        let contentWidth = self.contentWidth
+        let maxSpaceForImportantKeys = contentWidth - maxFuncKeyWidth - buttonPad
         var aditionalSpaceForImportantKeys: CGFloat = 0
         if maxSpaceForImportantKeys > 0 {
             aditionalSpaceForImportantKeys =  maxSpaceForImportantKeys / importantKeysCount
@@ -277,16 +278,23 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         var additionalUsedSpaceToAdd = 0.0
         
         // A wide bar in a compact-height scene is a phone in landscape; leave room for the
-        // rounded display corners there.
-        if traits.verticalSizeClass == .compact && frame.width > 500 {
+        // rounded display corners there. The safe-area insets already exclude the corners
+        // and the sensor housing, so this guess only applies when the host reports none.
+        if traits.verticalSizeClass == .compact && frame.width > 500 && !hasHorizontalSafeAreaInsets {
             additionalUsedSpaceToAdd = 50.0
         }
-        var left = frame.width - usedSpace - additionalUsedSpaceToAdd
+        var left = contentWidth - usedSpace - additionalUsedSpaceToAdd
+        // Budget each optional key at its laid-out width, not at `minWidth`: a titled key
+        // sizes to fit its title, which is wider than the phone `minWidth`, and budgeting
+        // the smaller figure let the last function keys slide under the arrow keys once the
+        // safe-area insets narrowed the bar.
         func addOptional (_ text: String, _ selector: Selector) {
-            left -= minWidth + buttonPad
-            
+            let button = makeButton(text, selector)
+            setMinWidth(button)
+            left -= button.frame.width + buttonPad
+
             if left > 0 {
-                floatViews.append(makeButton(text, selector))
+                floatViews.append(button)
             }
         }
         addOptional("F1", #selector(f1))
@@ -327,18 +335,44 @@ return
         }
     }
     
+    // The bar spans the whole display width, so in landscape on a phone its ends sit under
+    // the sensor housing and the rounded corners. The keys are laid out between the
+    // horizontal safe-area insets, taken per side because they differ: the housing is on
+    // one side only, and a foldable's halves can report different insets.
+    var hasHorizontalSafeAreaInsets: Bool {
+        safeAreaInsets.left > 0 || safeAreaInsets.right > 0
+    }
+
+    var contentWidth: CGFloat {
+        max(0, frame.width - safeAreaInsets.left - safeAreaInsets.right)
+    }
+
+    var laidOutHorizontalInsets: (left: CGFloat, right: CGFloat)?
+
+    public override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        // The insets decide how many optional keys fit, so rebuild rather than only
+        // re-layout; the bottom inset (docked above the home indicator) does not matter.
+        let insets = (left: safeAreaInsets.left, right: safeAreaInsets.right)
+        if let last = laidOutHorizontalInsets, last == insets {
+            return
+        }
+        setupUI ()
+    }
+
     var buttonPad = 4.0
     public override func layoutSubviews() {
-        var x: CGFloat = 2
+        laidOutHorizontalInsets = (safeAreaInsets.left, safeAreaInsets.right)
+        var x: CGFloat = safeAreaInsets.left + 2
         let dh = views.reduce (0) { max ($0, $1.frame.size.height )}
-        
+
         for view in leftViews + floatViews {
             let size = view.frame.size
             view.frame = CGRect(x: x, y: 4, width: size.width, height: dh)
             x += size.width + buttonPad
         }
-        
-        var right = frame.width - 2
+
+        var right = frame.width - safeAreaInsets.right - 2
         for view in rightViews.reversed() {
             let size = view.frame.size
             view.frame = CGRect (x: right-size.width, y: 4, width: size.width, height: dh)
