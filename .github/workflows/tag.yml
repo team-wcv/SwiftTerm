@@ -1,0 +1,28 @@
+# Cut a patch tag only after the exact develop revision passes CI.
+#
+# Kits consume each other by version — `from: "0.0.x"` — and SwiftPM resolves
+# that to the newest matching TAG, not to develop. So work merged here stays
+# invisible to downstream consumers until a tag exists for it.
+#
+# See team-wcv/.github/.github/workflows/swift-kit-tag-after-ci.yml for the validated release gate.
+# It never moves a tag or bumps minor/major, and
+# skips when there is nothing new to release.
+
+name: tag
+
+on:
+  workflow_run:
+    workflows: ['Build & Test']
+    types: [completed]
+    branches: [develop]
+
+# Required. This repository's default workflow token is read-only, and a called
+# workflow cannot request more permission than its caller holds — without this
+# the run fails at startup, before any job exists, with no log to read.
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  tag:
+    uses: team-wcv/.github/.github/workflows/swift-kit-tag-after-ci.yml@70203744d25bfecc8ca68fdb1c7961c17e5ef4a0

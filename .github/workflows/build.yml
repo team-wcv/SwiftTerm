@@ -1,4 +1,10 @@
-name: Swift
+# Develop CI for the team-wcv fork.
+#
+# The workflow name and path are load-bearing: `tag.yml` filters on the name, and
+# swift-kit-tag-after-ci.yml tags only a successful push run of
+# `.github/workflows/build.yml`.
+
+name: Build & Test
 
 on:
   push:
