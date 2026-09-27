@@ -138,6 +138,17 @@ jobs:
       env:
         SWIFT_TEST_DISABLE_PARALLELIZATION: "1"
       run: |
+        set -euo pipefail
         swift test --enable-code-coverage
+        # Resolve paths from the toolchain: the Xcode 27 build layout moved the
+        # products to .build/out/Products/Debug and names the bundle after the
+        # test target, so hard-coded .build/debug paths no longer exist.
         BINDIR=$(swift build --show-bin-path)
-        xcrun llvm-cov report "$BINDIR/SwiftTermPackageTests.xctest/Contents/MacOS/SwiftTermPackageTests" --instr-profile=.build/debug/codecov/default.profdata -use-color
+        CODECOV_DIR=$(dirname "$(swift test --show-codecov-path)")
+        TEST_BUNDLE=$(find "$BINDIR" -maxdepth 1 -name '*.xctest' -type d | head -1)
+        if [ -z "$TEST_BUNDLE" ] || [ ! -f "$CODECOV_DIR/default.profdata" ]; then
+          echo "::error::Coverage inputs missing: bundle='$TEST_BUNDLE' profdata='$CODECOV_DIR/default.profdata'"
+          exit 1
+        fi
+        BUNDLE_NAME=$(basename "$TEST_BUNDLE" .xctest)
+        xcrun llvm-cov report "$TEST_BUNDLE/Contents/MacOS/$BUNDLE_NAME" --instr-profile="$CODECOV_DIR/default.profdata" -use-color
