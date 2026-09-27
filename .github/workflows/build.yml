@@ -78,7 +78,10 @@ jobs:
           ls -d /Applications/Xcode*.app || true
           exit 1
         fi
-        reported="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version | head -1)"
+        # Capture then parse: piping into head under pipefail lets xcodebuild die of SIGPIPE.
+        version_output="$(DEVELOPER_DIR="$developer_dir" xcodebuild -version)"
+        printf '%s\n' "$version_output"
+        reported="${version_output%%$'\n'*}"
         case "$reported" in
           "Xcode $XCODE_VERSION" | "Xcode $XCODE_VERSION".*) ;;
           *)
