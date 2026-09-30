@@ -87,6 +87,11 @@ class DoubleButton: UIControl {
         layer.shadowOffset = CGSize (width: 0, height: 0)
         layer.shadowRadius = 0
         layer.shadowOpacity = 1
+
+        // iOS 17+: traitCollectionDidChange(_:) is deprecated; refresh colors when style flips.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _: UITraitCollection) in
+            self.setColors()
+        }
     }
     
     func setColors () {
@@ -106,12 +111,6 @@ class DoubleButton: UIControl {
         layer.backgroundColor = backgroundColor.cgColor
         layer.shadowColor = buttonShadowColor.cgColor
         secondaryView.textColor = UIColor.systemGray
-    }
-    
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            super.traitCollectionDidChange(previousTraitCollection)
-
-        setColors ()
     }
     
     func resetLocation ()

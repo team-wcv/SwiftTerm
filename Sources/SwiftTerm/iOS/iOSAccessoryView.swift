@@ -323,12 +323,6 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         layoutSubviews ()
     }
     
-    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            super.traitCollectionDidChange(previousTraitCollection)
-return
-        setupUI()
-    }
-
     var _useSmall: Bool {
         get {
             frame.width < 380

@@ -18,6 +18,11 @@ class KeyboardView: UIView {
         self.terminalView = terminalView
         super.init (frame: frame)
         buildUI ()
+        // iOS 17+: traitCollectionDidChange(_:) is deprecated; rebuild when style flips.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _: UITraitCollection) in
+            self.terminalView?.setupKeyboardButtonColors()
+            self.buildUI()
+        }
     }
     
     func clickAndSend (_ data: [UInt8])
@@ -150,12 +155,6 @@ class KeyboardView: UIView {
         didSet {
             buildUI ()
         }
-    }
-    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            super.traitCollectionDidChange(previousTraitCollection)
-
-        terminalView?.setupKeyboardButtonColors()
-        buildUI()
     }
 }
 #endif
