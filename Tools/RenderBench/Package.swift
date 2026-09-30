@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "RenderBench",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v14)
     ],
     dependencies: [
         // name: pins the package identity so this also builds from checkouts

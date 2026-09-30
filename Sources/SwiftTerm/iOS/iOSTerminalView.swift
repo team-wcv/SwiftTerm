@@ -855,22 +855,13 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
         // The menu lists the standard edit actions this view accepts in
         // canPerformAction(_:withSender:): Copy, Paste, Select and Select All.
-        if #available(iOS 16.0, visionOS 1.0, *) {
-            editMenuPresenter.present(avoiding: forRegion)
-        } else {
-            let menuController = UIMenuController.shared
-            menuController.menuItems = []
-            menuController.showMenu(from: self, rect: forRegion)
-        }
+        editMenuPresenter.present(avoiding: forRegion)
     }
 
-    /// Backing store for `editMenuPresenter`. Stored properties cannot carry an availability
-    /// annotation, so this holds a `TerminalEditMenuPresenter` (iOS 16 and later) untyped.
-    private var editMenuPresenterStorage: AnyObject?
+    private var editMenuPresenterStorage: TerminalEditMenuPresenter?
 
-    @available(iOS 16.0, visionOS 1.0, *)
     var editMenuPresenter: TerminalEditMenuPresenter {
-        if let presenter = editMenuPresenterStorage as? TerminalEditMenuPresenter {
+        if let presenter = editMenuPresenterStorage {
             return presenter
         }
         let presenter = TerminalEditMenuPresenter(view: self)
@@ -880,18 +871,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     /// Whether the edit menu is on screen.
     var isEditMenuVisible: Bool {
-        if #available(iOS 16.0, visionOS 1.0, *) {
-            return (editMenuPresenterStorage as? TerminalEditMenuPresenter)?.isVisible ?? false
-        }
-        return UIMenuController.shared.isMenuVisible
+        editMenuPresenterStorage?.isVisible ?? false
     }
 
     func hideEditMenu () {
-        if #available(iOS 16.0, visionOS 1.0, *) {
-            (editMenuPresenterStorage as? TerminalEditMenuPresenter)?.dismiss()
-        } else {
-            UIMenuController.shared.hideMenu()
-        }
+        editMenuPresenterStorage?.dismiss()
     }
     
     // This is a position relative to the buffer
@@ -3744,10 +3728,9 @@ extension TerminalView: UIAccessibilityReadingContent {
 }
 #endif
 
-/// Presents the system edit menu for a ``TerminalView`` with `UIEditMenuInteraction`, which
-/// replaces `UIMenuController` from iOS 16. The menu's actions come from the view's
-/// `canPerformAction(_:withSender:)`; this object only places the menu and tracks visibility.
-@available(iOS 16.0, visionOS 1.0, *)
+/// Presents the system edit menu for a ``TerminalView`` with `UIEditMenuInteraction`.
+/// The menu's actions come from the view's `canPerformAction(_:withSender:)`; this object
+/// only places the menu and tracks visibility.
 @MainActor
 // UIKit calls the delegate on the main thread; @preconcurrency checks that at runtime.
 final class TerminalEditMenuPresenter: NSObject, @preconcurrency UIEditMenuInteractionDelegate {
