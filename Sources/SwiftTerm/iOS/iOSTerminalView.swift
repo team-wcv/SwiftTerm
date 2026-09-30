@@ -389,22 +389,17 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         setupLinkReportingInteractions()
         setupAccessoryView ()
         setupTextBlinking()
+        // iOS 17+: traitCollectionDidChange(_:) is deprecated; resize accessory when size class flips.
+        registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { (self: TerminalView, _: UITraitCollection) in
+            guard let accessory = self.terminalAccessory else { return }
+            let height = self.accessoryBarHeight
+            guard accessory.frame.height != height else { return }
+            accessory.frame.size.height = height
+            if self.isFirstResponder {
+                self.reloadInputViews()
+            }
+        }
         didFinishSetup = true
-    }
-
-    open override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        guard previousTraitCollection?.horizontalSizeClass != traitCollection.horizontalSizeClass
-                || previousTraitCollection?.verticalSizeClass != traitCollection.verticalSizeClass,
-              let accessory = terminalAccessory else {
-            return
-        }
-        let height = accessoryBarHeight
-        guard accessory.frame.height != height else { return }
-        accessory.frame.size.height = height
-        if isFirstResponder {
-            reloadInputViews()
-        }
     }
 
     open override func didMoveToWindow() {
@@ -979,7 +974,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
             release: release,
             shift: false,
             meta: false,
-            control: terminalAccessory?.controlModifier ?? controlModifier ?? false)
+            control: terminalAccessory?.controlModifier ?? controlModifier)
         terminalAccessory?.controlModifier = false
         controlModifier = false
         return encodedFlags
@@ -1235,7 +1230,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
                     let flags = terminal.encodeButton(
                         button: button, release: false,
                         shift: false, meta: false,
-                        control: terminalAccessory?.controlModifier ?? controlModifier ?? false)
+                        control: terminalAccessory?.controlModifier ?? controlModifier)
                     let hit = calculateTapHit(gesture: gestureRecognizer)
                     if let grid = hit.grid.toScreenCoordinate(from: terminal.displayBuffer) {
                         terminal.sendEvent(buttonFlags: flags, x: grid.col, y: grid.row,
@@ -1528,8 +1523,8 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     }
 
     /// Accessory bar height for the current size classes. Before the view is in a window its
-    /// size classes are unspecified, so this starts compact and traitCollectionDidChange(_:)
-    /// corrects it once the scene's traits arrive.
+    /// size classes are unspecified, so this starts compact and the size-class trait-change
+    /// registration corrects it once the scene's traits arrive.
     var accessoryBarHeight: CGFloat {
         TerminalView.isExpanded(traitCollection) ? 48 : 36
     }
@@ -2233,7 +2228,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
         if !terminal.keyboardEnhancementFlags.isEmpty {
             sendKittyTextInput(textToInsert, applyModifiers: applyModifiers)
-        } else if applyModifiers && (terminalAccessory?.controlModifier ?? controlModifier ?? false) {
+        } else if applyModifiers && (terminalAccessory?.controlModifier ?? controlModifier) {
             self.send(applyControlToEventCharacters(textToInsert))
             terminalAccessory?.controlModifier = false
             controlModifier = false
@@ -2577,7 +2572,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     private func sendKittyTextInput(_ text: String, applyModifiers: Bool) {
         let flags = terminal.keyboardEnhancementFlags
-        let controlActive = applyModifiers && (terminalAccessory?.controlModifier ?? controlModifier ?? false)
+        let controlActive = applyModifiers && (terminalAccessory?.controlModifier ?? controlModifier)
         let metaActive = applyModifiers && metaModifier
         if controlActive {
             terminalAccessory?.controlModifier = false
@@ -3623,7 +3618,6 @@ extension TerminalView: UIAccessibilityReadingContent {
     }
     
     func startingLine(forLineNumber lineNumber: Int) -> Int {
-        let lineWidth = terminal.buffer.lines[lineNumber].count
         var startingLine = lineNumber
         while startingLine >= 1 {
             startingLine -= 1
@@ -3643,7 +3637,6 @@ extension TerminalView: UIAccessibilityReadingContent {
     }
 
     func endingLine(forLineNumber lineNumber: Int) -> Int {
-        let lineWidth = terminal.buffer.lines[lineNumber].count
         var endingLine = lineNumber
         while (endingLine < terminal.buffer.lines.count - 1) {
             let start = Position(col: 0, row: endingLine)
@@ -3660,25 +3653,24 @@ extension TerminalView: UIAccessibilityReadingContent {
     }
 
     public func accessibilityContent(forLineNumber lineNumber: Int) -> String? {
-        var startingLine = startingLine(forLineNumber: lineNumber)
-        var endingLine = endingLine(forLineNumber: lineNumber)
+        let startingLine = startingLine(forLineNumber: lineNumber)
+        let endingLine = endingLine(forLineNumber: lineNumber)
         let start = Position(col: 0, row: startingLine)
         let end = Position(col: terminal.buffer.lines[endingLine].count,
                            row: endingLine)
-        var text =  terminal.getDisplayText(start: start, end: end)
         return terminal.getDisplayText(start: start, end: end)
     }
 
     public func accessibilityFrame(forLineNumber lineNumber: Int) -> CGRect {
         let topVisibleLine = Int(contentOffset.y/cellDimension.height)
         let offset = contentOffset.y - CGFloat(topVisibleLine) * cellDimension.height
-        var startingLine = startingLine(forLineNumber: lineNumber)
-        var endingLine = endingLine(forLineNumber: lineNumber)
-        var verticalWidth = CGFloat(endingLine - startingLine + 1)
+        let startingLine = startingLine(forLineNumber: lineNumber)
+        let endingLine = endingLine(forLineNumber: lineNumber)
+        let verticalWidth = CGFloat(endingLine - startingLine + 1)
         let lineOffset =  cellDimension.height * CGFloat (startingLine - topVisibleLine + 1)
         let lineOrigin = CGPoint(x: 0, y: lineOffset)
         let columnCount = terminal.buffer.lines[lineNumber].count
-        var rect = CGRect(
+        let rect = CGRect(
             x: lineOrigin.x,
             y: lineOrigin.y + 3 - offset,
             width: CGFloat(columnCount) * cellDimension.width,
@@ -3697,10 +3689,10 @@ extension TerminalView: UIAccessibilityReadingContent {
     }
 
     public func accessibilityAttributedContent(forLineNumber lineNumber: Int) -> NSAttributedString? {
-        var startingLine = startingLine(forLineNumber: lineNumber)
-        var endingLine = endingLine(forLineNumber: lineNumber)
-        var start = Position(col: 0, row: startingLine)
-        var end = Position(col: terminal.buffer.lines[endingLine].count,
+        let startingLine = startingLine(forLineNumber: lineNumber)
+        let endingLine = endingLine(forLineNumber: lineNumber)
+        let start = Position(col: 0, row: startingLine)
+        let end = Position(col: terminal.buffer.lines[endingLine].count,
                            row: endingLine)
         return accessibilityAttributedDisplayText(start: start, end: end)
     }
