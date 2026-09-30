@@ -22,7 +22,7 @@ TerminalView and related view classes for macOS, iOS, and visionOS.
 
 **File**: `Sources/SwiftTerm/Mac/MacTerminalView.swift`
 **Declaration**: `open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, TerminalDelegate`
-**Platform**: macOS 13+
+**Platform**: macOS 14+
 
 An AppKit `NSView` that renders the terminal and handles keyboard/mouse input.
 
@@ -72,7 +72,7 @@ public required init?(coder: NSCoder)
 
 **File**: `Sources/SwiftTerm/iOS/iOSTerminalView.swift`
 **Declaration**: `open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollViewDelegate, TerminalDelegate`
-**Platform**: iOS 15+, visionOS 1+
+**Platform**: iOS 17+, visionOS 1+
 
 A UIKit `UIScrollView` subclass that renders the terminal. Supports software keyboard, external keyboard input, and the `TerminalAccessory` input bar.
 

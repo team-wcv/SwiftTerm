@@ -147,10 +147,10 @@ let targets: [Target] = [
 let package = Package(
     name: "SwiftTerm",
     platforms: [
-        // iOS 15 / tvOS 15 are the lowest targets Xcode 27 builds; macOS 13 matches the
-        // package-benchmark requirement, so the manifest no longer needs two floors.
-        .iOS(.v15),
-        .macOS(.v13),
+        // Program floors for the form-factor work: iOS 17 / macOS 14. tvOS 15 stays the
+        // Xcode 27 floor; visionOS 1 is unchanged.
+        .iOS(.v17),
+        .macOS(.v14),
         .tvOS(.v15),
         .visionOS(.v1)
     ],
