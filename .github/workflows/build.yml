@@ -120,7 +120,7 @@ jobs:
       if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') }}
       run: swift build -v
 
-    # The package's own iOS Simulator slice, built against its iOS 13 floor.
+    # The package's own iOS Simulator slice, built against its iOS 17 floor.
     - name: Swift Package Build (iOS Simulator)
       if: ${{ contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,') }}
       run: |
