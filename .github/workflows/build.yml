@@ -54,6 +54,11 @@ concurrency:
 # team-wcv/.github swift-kit-ci-platforms.yml. It uses the same toolchain rule:
 # exact Xcode 27.0 on the xcode-27 image, failing if that bundle is missing.
 # A dispatch's `platforms` choice gates the macOS and iOS steps.
+#
+# Hosted runs follow the CI_HOSTED repository variable (off | linux | on; unset = on).
+# push and pull_request start the macOS jobs only while it is `on`; workflow_dispatch
+# and tag refs always run, so a hosted build stays one command away:
+#   gh workflow run build.yml --ref <branch> -f platforms=macos,ios
 jobs:
   build:
     if: >-
@@ -62,6 +67,7 @@ jobs:
         github.event_name == 'workflow_dispatch' ||
         (github.event_name == 'pull_request' && vars.SWIFT_KIT_CI_ON_PULL_REQUEST == 'true')) &&
         (contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',macos,') || contains(format(',{0},', inputs.platforms || 'macos,ios,watchos'), ',ios,'))
+        && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || vars.CI_HOSTED == 'on' || vars.CI_HOSTED == '')
       }}
 
     runs-on: xcode-27
