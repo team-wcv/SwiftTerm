@@ -17,6 +17,9 @@ concurrency:
 
 jobs:
   build:
+    # macOS on push to main follows CI_HOSTED (off | linux | on; unset = on);
+    # workflow_dispatch always publishes. deploy needs this job, so it follows too.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || vars.CI_HOSTED == 'on' || vars.CI_HOSTED == '' }}
     runs-on: macos-latest
     steps:
       - name: Checkout
