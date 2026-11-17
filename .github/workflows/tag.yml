@@ -9,6 +9,11 @@
 # startup with zero jobs). The org's shared tag-after-CI gate is private, so this
 # file carries the same logic inline. Keep the two in step when either changes.
 #
+# It also runs on workflow_dispatch from develop: it then tags develop HEAD when
+# that SHA has a successful push build.yml run or a `local-ci/swift` success
+# status (the receipt the team's swift-ci.sh --receipt posts). That is how a
+# release is cut while CI_HOSTED is off, mirroring the shared tag-after-CI gate.
+#
 # The gate never moves a tag or bumps minor/major, keeps the prefix of the
 # newest MAJOR.MINOR.PATCH tag (`v` here), and skips when the validated
 # revision already has a tag or a newer revision was already released.
@@ -20,20 +25,23 @@ on:
     workflows: ['Build & Test']
     types: [completed]
     branches: [develop]
+  workflow_dispatch:
 
 # Required. This repository's default workflow token is read-only; tagging
 # needs contents: write, and reading the triggering run needs actions: read.
 permissions:
   actions: read
   contents: write
+  statuses: read
 
 jobs:
   tag:
     if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'develop'
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'develop') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency:
@@ -49,22 +57,50 @@ jobs:
           script: |
             const repo = context.repo;
             const fullName = `${repo.owner}/${repo.repo}`;
-            const event = context.payload.workflow_run;
+            const RECEIPT = 'local-ci/swift';
             const valid = run => run && run.event === 'push' && run.head_branch === 'develop'
               && run.status === 'completed' && run.conclusion === 'success'
               && run.path === '.github/workflows/build.yml'
               && run.repository?.full_name === fullName
               && run.head_repository?.full_name === fullName
               && /^[0-9a-f]{40}$/.test(run.head_sha);
-            if (context.eventName !== 'workflow_run' || !valid(event)) {
-              throw new Error('Tagging requires a successful build.yml push run from this repository develop branch');
+            let sha, evidence, branch;
+            if (context.eventName === 'workflow_run') {
+              const event = context.payload.workflow_run;
+              if (!valid(event)) {
+                throw new Error('Tagging requires a successful build.yml push run from this repository develop branch');
+              }
+              const { data: current } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: event.id });
+              if (!valid(current) || current.head_sha !== event.head_sha || current.run_attempt !== event.run_attempt) {
+                throw new Error('The completed CI event no longer matches a successful current run attempt');
+              }
+              sha = current.head_sha;
+              evidence = `CI: ${current.html_url}`;
+              ({ data: branch } = await github.rest.repos.getBranch({ ...repo, branch: 'develop' }));
+            } else if (context.eventName === 'workflow_dispatch') {
+              if (context.ref !== 'refs/heads/develop') {
+                throw new Error(`Dispatch tagging runs on develop only, not ${context.ref}`);
+              }
+              ({ data: branch } = await github.rest.repos.getBranch({ ...repo, branch: 'develop' }));
+              sha = branch.commit.sha;
+              if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`develop HEAD ${sha} is not a commit SHA`);
+              const { data: runs } = await github.rest.actions.listWorkflowRuns({ ...repo, workflow_id: 'build.yml',
+                head_sha: sha, event: 'push', branch: 'develop', status: 'success', per_page: 20 });
+              const run = (runs.workflow_runs || []).find(candidate => valid(candidate) && candidate.head_sha === sha);
+              if (run) {
+                evidence = `CI: ${run.html_url}`;
+              } else {
+                const { data: combined } = await github.rest.repos.getCombinedStatusForRef({ ...repo, ref: sha, per_page: 100 });
+                const receipt = (combined.statuses || []).find(status => status.context === RECEIPT);
+                if (combined.sha !== sha || !receipt || receipt.state !== 'success') {
+                  throw new Error(`develop HEAD ${sha} has neither a successful push build.yml run nor a ${RECEIPT} success status`
+                    + (receipt ? ` (${RECEIPT} is ${receipt.state})` : ''));
+                }
+                evidence = `Local CI receipt: ${RECEIPT} success, ${receipt.description || 'no description'}`;
+              }
+            } else {
+              throw new Error(`Tagging runs from workflow_run or workflow_dispatch, not ${context.eventName}`);
             }
-            const { data: current } = await github.rest.actions.getWorkflowRun({ ...repo, run_id: event.id });
-            if (!valid(current) || current.head_sha !== event.head_sha || current.run_attempt !== event.run_attempt) {
-              throw new Error('The completed CI event no longer matches a successful current run attempt');
-            }
-            const sha = current.head_sha;
-            const { data: branch } = await github.rest.repos.getBranch({ ...repo, branch: 'develop' });
             const { data: reachable } = await github.rest.repos.compareCommits({ ...repo, base: sha, head: branch.commit.sha });
             if (!['ahead', 'identical'].includes(reachable.status)) {
               throw new Error('Validated revision is no longer reachable from develop');
@@ -99,7 +135,7 @@ jobs:
               throw new Error('Existing tags have no stable MAJOR.MINOR.PATCH version; refusing to guess');
             }
             const { data: tagObject } = await github.rest.git.createTag({ ...repo, tag: next,
-              message: `${next}\n\nValidated develop revision ${sha}\nCI: ${current.html_url}`,
+              message: `${next}\n\nValidated develop revision ${sha}\n${evidence}`,
               object: sha, type: 'commit' });
             try {
               await github.rest.git.createRef({ ...repo, ref: `refs/tags/${next}`, sha: tagObject.sha });
