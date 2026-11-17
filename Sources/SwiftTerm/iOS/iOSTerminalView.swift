@@ -266,8 +266,10 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     var attributes: [Attribute: [NSAttributedString.Key:Any]] = [:]
     var urlAttributes: [Attribute: [NSAttributedString.Key:Any]] = [:]
 
-    // Timer to display the terminal buffer
-    var link: CADisplayLink!
+    // Timer to display the terminal buffer. It exists only while the view is in a window:
+    // a display link retains its target, so a link that outlived the window kept the view
+    // and its scrollback alive forever.
+    var link: CADisplayLink?
     // Cache for the colors in the 0..255 range
     var colors: [UIColor?] = Array(repeating: nil, count: 256)
     var trueColors: [Attribute.Color:UIColor] = [:]
@@ -382,7 +384,6 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         indicatorStyle = .white
         
         setupKeyboardButtonColors()
-        setupDisplayUpdates ();
         setupOptions ()
         setupProgressBar()
         setupGestures ()
@@ -402,8 +403,18 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
         didFinishSetup = true
     }
 
+    open override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil {
+            teardownDisplayUpdates()
+        }
+    }
+
     open override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window != nil {
+            setupDisplayUpdates()
+        }
         updateTextBlinkLifecycle()
 #if canImport(MetalKit)
         if isMetalRendererEligibleForRetry {
@@ -423,6 +434,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     }
 
     deinit {
+        link?.invalidate()
         stopTextBlinking()
     }
 
@@ -688,10 +700,18 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     func setupDisplayUpdates ()
     {
-        link = CADisplayLink(target: self, selector: #selector(step))
-            
-        link.add(to: .current, forMode: .default)
-        suspendDisplayUpdates()
+        guard link == nil else { return }
+        let displayLink = CADisplayLink(target: self, selector: #selector(step))
+        displayLink.isPaused = true
+        displayLink.add(to: .main, forMode: .default)
+        link = displayLink
+    }
+
+    /// Invalidating breaks the run loop's retain on the link, and the link's on this view.
+    func teardownDisplayUpdates ()
+    {
+        link?.invalidate()
+        link = nil
     }
 
     private func setupProgressBar() {
@@ -758,16 +778,16 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     func startDisplayUpdates()
     {
-        link.isPaused = false
+        link?.isPaused = false
     }
     
     func suspendDisplayUpdates()
     {
-        link.isPaused = true
+        link?.isPaused = true
     }
     
     public func updateUiClosed() {
-        self.link.invalidate()
+        teardownDisplayUpdates()
         stopTextBlinking()
     }
     
