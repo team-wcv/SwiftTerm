@@ -10,15 +10,16 @@ team-wcv/SwiftTerm is the team's public fork of Miguel de Icaza's SwiftTerm, an 
 
 ## Rules
 
-- This repo is public: never add a private dependency, secret, internal host name or reference to a private repo's contents.
-- Public API changes (renamed or removed public symbols, changed signatures) reach TerminalKit and the App: name them in the PR, and for a breaking one ask the operator (an opt-in question, not a gate), keep working, and hold the merge until answered.
+- This repo is public: never add a private dependency, private code, a secret or an internal host name, and never register a self-hosted runner on it.
+- Public API changes (renamed or removed public symbols, changed signatures) and raising `platforms`, the Swift tools version or the language mode reach TerminalKit and the App: name them in the PR, and for a breaking one ask the operator (an opt-in question, not a gate), keep working, and hold the merge until answered.
 
 ## Build and CI
 
 - Swift tools 6.0; iOS 17, macOS 14, tvOS 15, visionOS 1.
 - Before merging, run team-wcv/.github `scripts/swift-ci.sh -C <this checkout> --platforms macos,ios --receipt` (`--host auto` runs it on the least-loaded team Mac). It posts the `local-ci/swift` receipt merges need. Hosted CI is normally off for pushes and pull requests; dispatch it only with a reason and the `ci-run.sh` cost estimate in the ticket, and never change `CI_HOSTED` yourself. The rules are in team-wcv/repo-policy `docs/ci-cost-policy.md`.
-- Unlike the kits, `build.yml` and `tag.yml` are inline: a public repo cannot call the org's private reusable workflows. Keep them in step with the shared Swift and tag-after-CI workflows by hand; they are listed in repo-policy `policies/inline-workflow-exceptions.json`. `build.yml`'s name and path are load-bearing for `tag.yml`.
+- Unlike the kits, the workflows are inline and listed in repo-policy `policies/inline-workflow-exceptions.json`: `build.yml` also builds the sample MacTerminal and iOSTerminal apps; `tag.yml` mirrors the shared tag-after-CI gate by hand (a public repo cannot call the org's private reusables), so keep the two in step; `docc.yml` publishes the DocC site from `main` or on dispatch. `build.yml`'s name and path are load-bearing for `tag.yml`. Local CI doesn't build the sample apps.
 
 ## Releases
 
-- `tag.yml` cuts the next `v` patch tag after a develop revision passes Build & Test. TerminalKit takes it by raising its `from:` floor in a release wave.
+- Tags are cut in release waves: dispatch `tag.yml` on develop and it tags develop HEAD as the next `v` patch when that commit has a `local-ci/swift` receipt (or a green hosted push build). TerminalKit's `from:` picks up the new patch tag; raise the floor only to require it, in a wave.
+- The App pins SwiftTerm at an exact `develop` revision, so a merge reaches it through the App's next repin, not a tag.
