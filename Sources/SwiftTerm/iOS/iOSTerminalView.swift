@@ -270,6 +270,9 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     // a display link retains its target, so a link that outlived the window kept the view
     // and its scrollback alive forever.
     var link: CADisplayLink?
+    /// Guards `link`: a feed on a background thread starts and suspends it while main
+    /// creates and tears it down as the view moves in and out of a window.
+    private let displayLinkLock = NSLock()
     // Cache for the colors in the 0..255 range
     var colors: [UIColor?] = Array(repeating: nil, count: 256)
     var trueColors: [Attribute.Color:UIColor] = [:]
@@ -700,6 +703,8 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     func setupDisplayUpdates ()
     {
+        displayLinkLock.lock()
+        defer { displayLinkLock.unlock() }
         guard link == nil else { return }
         let displayLink = CADisplayLink(target: self, selector: #selector(step))
         displayLink.isPaused = true
@@ -710,8 +715,11 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     /// Invalidating breaks the run loop's retain on the link, and the link's on this view.
     func teardownDisplayUpdates ()
     {
-        link?.invalidate()
+        displayLinkLock.lock()
+        let displayLink = link
         link = nil
+        displayLinkLock.unlock()
+        displayLink?.invalidate()
     }
 
     private func setupProgressBar() {
@@ -778,12 +786,18 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
 
     func startDisplayUpdates()
     {
-        link?.isPaused = false
+        displayLinkLock.lock()
+        let displayLink = link
+        displayLinkLock.unlock()
+        displayLink?.isPaused = false
     }
     
     func suspendDisplayUpdates()
     {
-        link?.isPaused = true
+        displayLinkLock.lock()
+        let displayLink = link
+        displayLinkLock.unlock()
+        displayLink?.isPaused = true
     }
     
     public func updateUiClosed() {
