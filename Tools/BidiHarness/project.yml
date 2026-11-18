@@ -1,6 +1,6 @@
 name: BidiHarness
 options:
-  minimumXcodeGenVersion: 2.42.0
+  minimumXcodeGenVersion: 2.47.0
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true

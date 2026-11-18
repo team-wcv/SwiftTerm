@@ -219,10 +219,11 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = FFE0F6A58B165BE4F1226EA5 /* Build configuration list for PBXProject "BidiHarness" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -235,6 +236,7 @@
 				CE74200F5A4D428E4F9248F9 /* XCLocalSwiftPackageReference "../.." */,
 			);
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 47B4BC5FF4EC94E03FBDDD40 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
