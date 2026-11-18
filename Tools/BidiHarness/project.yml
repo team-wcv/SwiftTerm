@@ -1,8 +1,8 @@
 name: BidiHarness
 options:
-  minimumXcodeGenVersion: 2.42.0
+  minimumXcodeGenVersion: 2.47.0
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "14.0"
   createIntermediateGroups: true
 packages:
   SwiftTerm:
@@ -27,7 +27,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.swiftterm.BidiHarness
         PRODUCT_NAME: BidiHarness
         INFOPLIST_FILE: BidiHarness/Info.plist
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
         SWIFT_VERSION: "5.0"
         ENABLE_DEBUG_DYLIB: NO
         CODE_SIGNING_ALLOWED: NO
@@ -47,6 +47,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.swiftterm.BidiHarnessTests
         GENERATE_INFOPLIST_FILE: YES
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
         SWIFT_VERSION: "5.0"
         CODE_SIGNING_ALLOWED: NO

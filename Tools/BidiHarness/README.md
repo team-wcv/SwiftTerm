@@ -9,7 +9,7 @@ endings.
 
 ## Prerequisites
 
-The harness requires macOS 13 or later, Xcode, Python 3, and
+The harness requires macOS 14 or later, Xcode, Python 3, and
 [XcodeGen](https://github.com/yonaskolb/XcodeGen). The launch script uses
 XcodeGen to update the Xcode project before each build.
 
