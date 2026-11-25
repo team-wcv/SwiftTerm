@@ -26,6 +26,8 @@ on:
     types: [completed]
     branches: [develop]
   workflow_dispatch:
+  # A local-ci/swift receipt on develop HEAD starts the tag (job `receipt` below).
+  status:
 
 # Required. This repository's default workflow token is read-only; tagging
 # needs contents: write, and reading the triggering run needs actions: read.
@@ -35,6 +37,38 @@ permissions:
   statuses: read
 
 jobs:
+  # Hosted Build & Test is skipped while CI_HOSTED is off, so the workflow_run path
+  # never sees a success and nothing tags. The local-ci/swift receipt is the evidence
+  # instead: merge tooling carries it onto the develop commit a few minutes after the
+  # merge. When it lands on develop HEAD, start this workflow on develop; that dispatched
+  # run is the gate and re-checks the receipt before it tags. (A GITHUB_TOKEN may start
+  # workflow_dispatch runs, unlike other events.) Receipts on other branches skip.
+  receipt:
+    if: >-
+      github.event_name == 'status' &&
+      github.event.context == 'local-ci/swift' &&
+      github.event.state == 'success' &&
+      contains(github.event.branches.*.name, 'develop')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Start the tag run when the receipt is for develop HEAD
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECEIPT_SHA: ${{ github.event.sha }}
+        run: |
+          set -euo pipefail
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/branches/develop" --jq .commit.sha)"
+          if [ "$head" != "$RECEIPT_SHA" ]; then
+            echo "Receipt is for ${RECEIPT_SHA}, develop is at ${head}; the receipt on develop HEAD starts the tag."
+            exit 0
+          fi
+          gh workflow run tag.yml --repo "$GITHUB_REPOSITORY" --ref develop
+          echo "Started tag.yml on develop for ${head}."
+
   tag:
     if: >-
       (github.event_name == 'workflow_run' &&

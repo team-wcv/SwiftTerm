@@ -21,5 +21,6 @@ team-wcv/SwiftTerm is the team's public fork of Miguel de Icaza's SwiftTerm, an 
 
 ## Releases
 
-- Tags are cut in release waves: dispatch `tag.yml` on develop and it tags develop HEAD as the next `v` patch when that commit has a `local-ci/swift` receipt (or a green hosted push build). TerminalKit's `from:` picks up the new patch tag; raise the floor only to require it, in a wave.
+- `tag.yml` tags develop HEAD as the next `v` patch once its `local-ci/swift` receipt lands (or after a green hosted push build); dispatching it on develop does the same. TerminalKit's `from:` picks up the new patch tag; raise the floor only to require it, in a wave.
+- After a merge, follow it to the tag and the App repin (`orc-git-workflow` skill, [After you merge](https://github.com/team-wcv/Orchestraitor/blob/develop/skills/orc-git-workflow/SKILL.md#after-you-merge)).
 - The App pins SwiftTerm at an exact `develop` revision, so a merge reaches it through the App's next repin, not a tag.
