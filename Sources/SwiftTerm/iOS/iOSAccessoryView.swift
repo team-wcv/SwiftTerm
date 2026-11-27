@@ -76,6 +76,16 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
     
     @objc func esc (_ sender: AnyObject) { clickAndSend ([0x1b]) }
     @objc func tab (_ sender: AnyObject) { clickAndSend ([0x9]) }
+    /// Shift-Tab (CSI Z): agent CLIs cycle modes with it, and the software keyboard has none.
+    @objc func backtab (_ sender: AnyObject) { clickAndSend ([0x1b, 0x5b, 0x5a]) }
+    /// Ctrl-C without reaching for the ctrl modifier and then the letter.
+    @objc func interrupt (_ sender: AnyObject) { clickAndSend ([0x03]) }
+    @objc func enter (_ sender: AnyObject) { clickAndSend ([0x0d]) }
+    /// Swaps the punctuation and command keys for F1–F10, and back.
+    @objc func toggleFunctionKeys (_ sender: AnyObject) {
+        showsFunctionKeys.toggle()
+        setupUI ()
+    }
     @objc func tilde (_ sender: AnyObject) { clickAndInsertText ("~") }
     @objc func pipe (_ sender: AnyObject) { clickAndInsertText ("|") }
     @objc func slash (_ sender: AnyObject) { clickAndInsertText ("/") }
@@ -178,6 +188,9 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         touchButton.isSelected = !(terminalView?.allowMouseReporting ?? false)
     }
 
+    /// Whether the middle of the bar holds F1–F10 (after Fn) rather than the keys a shell
+    /// and an agent CLI need more: Return, Ctrl-C and Shift-Tab.
+    public var showsFunctionKeys = false
     var leftViews: [UIView] = []
     var floatViews: [UIView] = []
     var rightViews: [UIView] = []
@@ -212,6 +225,7 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
             leftViews.append(makeButton("", #selector(tab), icon: "arrow.right.to.line.compact", isNormal: false))
             //leftViews.append(makeButton ("tab", #selector(tab)))
         }
+        rightViews.append(makeButton ("", #selector(enter), icon: "return", isNormal: false))
         rightViews.append(makeAutoRepeatButton ("arrow.left", #selector(left)))
         rightViews.append(makeAutoRepeatButton ("arrow.down", #selector(down)))
         rightViews.append(makeAutoRepeatButton ("arrow.up", #selector(up)))
@@ -230,7 +244,7 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         // calculate aditional space we can give to keys we want to be bigger (all top level except function keys)
         let minWidth: CGFloat = useSmall ? 20.0 : TerminalView.isExpanded(traits) ? 32 : 22
         let maxFuncKeyWidth = (minWidth + buttonPad) * 10
-        let importantKeysCount: Double = useSmall ? 11 : 13
+        let importantKeysCount: Double = useSmall ? 12 : 14
         let contentWidth = self.contentWidth
         let maxSpaceForImportantKeys = contentWidth - maxFuncKeyWidth - buttonPad
         var aditionalSpaceForImportantKeys: CGFloat = 0
@@ -284,6 +298,12 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
             additionalUsedSpaceToAdd = 50.0
         }
         var left = contentWidth - usedSpace - additionalUsedSpaceToAdd
+        // Fn swaps the command keys below for F1–F10; it is budgeted first so it always shows.
+        let fnButton = makeButton ("Fn", #selector(toggleFunctionKeys), isNormal: false)
+        fnButton.isSelected = showsFunctionKeys
+        setMinWidth (fnButton)
+        left -= fnButton.frame.width + buttonPad
+        floatViews.append (fnButton)
         // Budget each optional key at its laid-out width, not at `minWidth`: a titled key
         // sizes to fit its title, which is wider than the phone `minWidth`, and budgeting
         // the smaller figure let the last function keys slide under the arrow keys once the
@@ -297,16 +317,23 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
                 floatViews.append(button)
             }
         }
-        addOptional("F1", #selector(f1))
-        addOptional("F2", #selector(f2))
-        addOptional("F3", #selector(f3))
-        addOptional("F4", #selector(f4))
-        addOptional("F5", #selector(f5))
-        addOptional("F6", #selector(f6))
-        addOptional("F7", #selector(f7))
-        addOptional("F8", #selector(f8))
-        addOptional("F9", #selector(f9))
-        addOptional("F10", #selector(f10))
+        if showsFunctionKeys {
+            addOptional("F1", #selector(f1))
+            addOptional("F2", #selector(f2))
+            addOptional("F3", #selector(f3))
+            addOptional("F4", #selector(f4))
+            addOptional("F5", #selector(f5))
+            addOptional("F6", #selector(f6))
+            addOptional("F7", #selector(f7))
+            addOptional("F8", #selector(f8))
+            addOptional("F9", #selector(f9))
+            addOptional("F10", #selector(f10))
+        } else {
+            // What a shell and an agent CLI ask for, ahead of function keys: "shift+tab to
+            // cycle", and an interrupt in one tap.
+            addOptional("⌃C", #selector(interrupt))
+            addOptional("⇧⇥", #selector(backtab))
+        }
         let smallerFloatViews = useSmall ? floatViews.suffix(floatViews.count - 2) : floatViews.suffix(floatViews.count - 4)
         smallerFloatViews.forEach {
             setMinWidth($0)
@@ -337,8 +364,16 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
         safeAreaInsets.left > 0 || safeAreaInsets.right > 0
     }
 
+    /// The keys' inset from each end. Docked at the bottom of the display (no software
+    /// keyboard under it), the bar's ends sit under the rounded corners, which the
+    /// horizontal safe area does not cover in portrait: the first key was clipped there.
+    var endInset: (left: CGFloat, right: CGFloat) {
+        let corner: CGFloat = safeAreaInsets.bottom > 0 ? 14 : 0
+        return (max(safeAreaInsets.left, corner), max(safeAreaInsets.right, corner))
+    }
+
     var contentWidth: CGFloat {
-        max(0, frame.width - safeAreaInsets.left - safeAreaInsets.right)
+        max(0, frame.width - endInset.left - endInset.right)
     }
 
     var laidOutHorizontalInsets: (left: CGFloat, right: CGFloat)?
@@ -346,8 +381,9 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
     public override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
         // The insets decide how many optional keys fit, so rebuild rather than only
-        // re-layout; the bottom inset (docked above the home indicator) does not matter.
-        let insets = (left: safeAreaInsets.left, right: safeAreaInsets.right)
+        // re-layout; the bottom inset matters only as far as it says the bar is docked at
+        // the display's bottom, under its rounded corners (``endInset``).
+        let insets = endInset
         if let last = laidOutHorizontalInsets, last == insets {
             return
         }
@@ -356,8 +392,8 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
 
     var buttonPad = 4.0
     public override func layoutSubviews() {
-        laidOutHorizontalInsets = (safeAreaInsets.left, safeAreaInsets.right)
-        var x: CGFloat = safeAreaInsets.left + 2
+        laidOutHorizontalInsets = endInset
+        var x: CGFloat = endInset.left + 2
         let dh = views.reduce (0) { max ($0, $1.frame.size.height )}
 
         for view in leftViews + floatViews {
@@ -366,7 +402,7 @@ public class TerminalAccessory: UIInputView, UIInputViewAudioFeedback {
             x += size.width + buttonPad
         }
 
-        var right = frame.width - safeAreaInsets.right - 2
+        var right = frame.width - endInset.right - 2
         for view in rightViews.reversed() {
             let size = view.frame.size
             view.frame = CGRect (x: right-size.width, y: 4, width: size.width, height: dh)
